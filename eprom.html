@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n>Portfoliator — obraz karty EPROM</title>
+<script src="js/boot.js" data-entry="js/eprom/app.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="lang" role="group" aria-label="Język / Language">
+    <button type="button" id="lang-pl">PL</button>
+    <button type="button" id="lang-en">EN</button>
+  </div>
+
+  <h1 data-i18n>Karta EPROM</h1>
+  <p class="sub" data-i18n-html>Obraz do wypalenia w&nbsp;EPROM-ie karty Atari Portfolio · <a href="index.html">emulator</a></p>
+</header>
+
+<main class="page">
+  <p class="hint" data-i18n-html>Karta pokazuje Portfolio zawsze 128&nbsp;KB naraz, więc większy EPROM
+    dzielony jest na <b>banki</b> po 128&nbsp;KB — każdy to osobny dysk z&nbsp;własnymi plikami,
+    a który z&nbsp;nich widać, wybiera karta. Narzędzie składa banki w&nbsp;jeden plik
+    <code>.epr</code> gotowy dla programatora, w&nbsp;tym samym układzie, w&nbsp;jakim robił to
+    program <i>DISK zu EPROM Konverter</i> z&nbsp;Atari ST. Pliki nie opuszczają przeglądarki.</p>
+
+  <div class="row">
+    <span data-i18n>Układ EPROM</span>
+    <select id="eprom-type">
+      <option value="131072" data-i18n>27C010 — 128 KB, 1 bank</option>
+      <option value="262144" data-i18n>27C020 — 256 KB, 2 banki</option>
+      <option value="524288" selected data-i18n>27C040 — 512 KB, 4 banki</option>
+      <option value="1048576" data-i18n>27C080 — 1 MB, 8 banków</option>
+    </select>
+  </div>
+
+  <div class="row">
+    <label class="filebtn"><span data-i18n>Wczytaj obraz .epr…</span><input type="file" id="eprom-open" accept=".epr,.bin,.img,.rom"></label>
+    <button type="button" id="eprom-save" class="primary" data-i18n>Pobierz obraz EPROM</button>
+  </div>
+  <p class="hint" id="eprom-status" aria-live="polite"></p>
+
+  <div id="banks" class="banks"></div>
+
+  <template id="bank-template">
+    <section class="bank">
+      <h2><span class="bank-title"></span> <small class="bank-range"></small></h2>
+
+      <div class="row">
+        <span data-i18n>Etykieta</span>
+        <input type="text" class="bank-label" maxlength="11" spellcheck="false">
+      </div>
+
+      <div class="dropzone bank-drop">
+        <span data-i18n>Upuść tu pliki albo katalogi</span>
+        <label class="filebtn"><span data-i18n>Dodaj pliki…</span><input type="file" class="bank-files" multiple></label>
+        <label class="filebtn"><span data-i18n>Wczytaj katalog jako bank…</span><input type="file" class="bank-folder" webkitdirectory></label>
+      </div>
+
+      <table class="files bank-list"></table>
+      <p class="hint bank-empty" data-i18n>Bank jest pusty — wypali się jako pusty dysk.</p>
+
+      <div class="bar"><div class="bar-fill bank-bar"></div></div>
+      <p class="hint bank-usage"></p>
+
+      <div class="row bank-actions">
+        <button type="button" class="bank-clear danger" data-i18n>Wyczyść</button>
+        <button type="button" class="bank-download" data-i18n>Pobierz bank (.epr)</button>
+      </div>
+    </section>
+  </template>
+
+  <h2 data-i18n>Jak to działa</h2>
+  <p class="hint" data-i18n-html><b>Wczytaj katalog jako bank</b> robi to, co dawniej
+    przygotowanie dyskietki na ST: zawartość katalogu trafia do korzenia banku, a&nbsp;jego
+    nazwa zostaje etykietą. Katalogi upuszczone na pole stają się podkatalogami, pliki
+    lądują w&nbsp;korzeniu. Długie nazwy skracane są do formatu 8.3 — skrócona nazwa stoi
+    w&nbsp;tabeli obok oryginału. Pozycje leżą alfabetycznie i&nbsp;w&nbsp;tej kolejności
+    pokaże je <code>DIR</code>.</p>
+  <p class="hint" data-i18n-html>Każdy bank to system plików FAT12 z&nbsp;klastrami po
+    1&nbsp;KB, więc mieści 126&nbsp;KB, a&nbsp;każdy plik zajmuje pełne kilobajty.
+    Katalog główny rośnie z&nbsp;zawartością: 15 pozycji, potem 47, 79 i&nbsp;111, za cenę
+    1&nbsp;KB miejsca na każdy krok. Bank sprawdzisz przed wypaleniem: <b>Pobierz bank</b>
+    daje plik 128&nbsp;KB, który emulator przyjmie w&nbsp;oknie <b>Karta pamięci</b> jako zwykłą
+    kartę.</p>
+</main>
+
+<dialog id="dlg-confirm" class="modal confirm">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-text"></p>
+  <div class="row confirm-actions">
+    <button type="button" id="confirm-cancel" data-i18n>Anuluj</button>
+    <button type="button" id="confirm-ok"></button>
+  </div>
+</dialog>
+
+</body>
+</html>

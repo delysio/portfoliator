@@ -1,0 +1,6 @@
+# Pliki ROM są własnością Atari Corp. i DIP Ltd. — nie wchodzą w skład
+# repozytorium (patrz LICENSE, sekcja "Co nie wchodzi w skład tego projektu").
+# Ten wpis ignoruje wszystko poza sobą samym, żeby katalog istniał po
+# sklonowaniu, ale żeby nikt przypadkiem nie wrzucił do niego zrzutu ROM-u.
+*
+!.gitignore

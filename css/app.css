@@ -1,0 +1,822 @@
+/* TeX Gyre Schola Italic, a free clone of Century Schoolbook (GUST Font
+   Licence - see fonts/GUST-FONT-LICENSE.txt) used for the logo silkscreened on
+   the case artwork. Served locally so the page does not depend on an external
+   host. The slant is drawn into the outlines, so this is declared as
+   font-style: normal - saying "italic" would make browsers synthesise a second,
+   doubled slant on top of it. The source is OTF (CFF outlines), hence
+   format('opentype') rather than 'truetype' on the last fallback. */
+@font-face {
+  font-family: 'Century Schoolbook Italic';
+  src: url('../fonts/century-schoolbook-italic.woff2') format('woff2'),
+       url('../fonts/century-schoolbook-italic.woff') format('woff'),
+       url('../fonts/century-schoolbook-italic.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #14171a;
+  --panel: #1e2328;
+  --line: #2e353c;
+  --text: #dde3e8;
+  --muted: #8a959e;
+  --danger: #c96a5c;
+
+  /* The logo purple silkscreened on the case: hsl(294, 37%, 30%). Everything
+     accented in the UI is built on that same 294 degree hue, only lifted in
+     lightness - the literal value scores 1.65:1 against the modal background,
+     which is far below the 4.5:1 small text needs to stay legible. */
+  --logo: rgb(100, 49, 106);
+  --logo-sub: rgb(78, 55, 84);
+  --accent: #bd77c5;         /* hsl(294, 40%, 62%) - 5.7:1 on the page, 5.0:1 on panels */
+  --accent-line: #704276;    /* hsl(294, 28%, 36%) - borders */
+  --accent-fill: #362438;    /* hsl(294, 22%, 18%) - hover wash */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0 0 3rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+  /* Without this, checkboxes fall back to the browser's own accent (Chrome's
+     default is blue) instead of the page's purple. Sliders used to rely on
+     this too, but are painted by hand further down - see input[type="range"]. */
+  accent-color: var(--accent);
+}
+
+header {
+  position: relative;
+  padding: 1.75rem 1.5rem 1.35rem;
+  text-align: center;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Language switch, parked in the corner of the header. Both labels are always
+   shown in their own language: whichever one the reader is stranded in, one of
+   the two is the word they are looking for. */
+.lang {
+  position: absolute;
+  top: 0.9rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.25rem;
+}
+
+.lang button {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+}
+
+.lang button.active {
+  border-color: var(--accent-line);
+  background: var(--accent-fill);
+  color: var(--accent);
+}
+
+/* Narrow screens put the header text under the switch, not beside it. */
+@media (max-width: 30rem) {
+  .lang { position: static; justify-content: center; margin-bottom: 0.75rem; }
+}
+
+h1 {
+  margin: 0;
+  font-family: 'Century Schoolbook Italic', Georgia, 'Times New Roman', serif;
+  font-size: 2.6rem;
+  font-weight: 400;
+  line-height: 1.1;
+  letter-spacing: -0.09em;
+  color: var(--logo);
+}
+
+.sub {
+  margin: 0.4rem 0 0;
+  color: var(--logo-sub);
+  font-size: 0.9rem;
+}
+
+/* The case is up to 2442px wide at 6x, so the shell area spans the full viewport
+   and scrolls on its own rather than being boxed into a fixed column. */
+main {
+  width: 100%;
+  padding: 1.5rem 0 0;
+}
+
+/* ---- LCD ---------------------------------------------------------------- */
+
+.lcd-case {
+  display: flex;
+  overflow-x: auto;
+  padding: 0 1rem 1.5rem;
+}
+
+/* `margin: auto` rather than justify-content: center - a centred flex item is
+   clipped at the start edge once the container overflows. */
+.shell {
+  position: relative;
+  flex: none;
+  margin: 0 auto;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  image-rendering: pixelated;
+  border-radius: 4px;
+  box-shadow: 0 6px 20px #0007;
+}
+
+#screen {
+  position: absolute;
+  display: block;
+  /* The backing store is cut to device pixels, so there is normally nothing
+     left to scale. Where the panel height lands a fraction of a pixel off - a
+     display at 110%, say - "pixelated" would snap that fraction onto whole
+     rows and undo the very evenness the dot grid is drawn for. */
+  image-rendering: auto;
+}
+
+/* ---- toolbar & status --------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  padding: 0 1rem;
+}
+
+.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-top: 1.25rem;
+  padding: 0.75rem 1rem 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.statusbar b { color: var(--text); font-weight: 600; }
+.statusbar span.warn { color: #d8b45f; }
+.statusbar b.ok { color: var(--accent); }
+.statusbar b.warn { color: #d8b45f; }
+.statusbar b.err { color: var(--danger); }
+
+/* ---- controls ----------------------------------------------------------- */
+
+button {
+  padding: 0.4rem 0.85rem;
+  background: #333b42;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+button:hover { background: #3d464e; }
+button.danger { border-color: #5c3b36; color: #e7a396; }
+button.danger:hover { background: #4a3330; }
+button.primary { border-color: var(--accent-line); color: var(--accent); }
+button.primary:hover { background: var(--accent-fill); }
+
+select, input[type="file"], input[type="text"], input[type="number"] {
+  padding: 0.3rem 0.4rem;
+  background: #262c32;
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.85rem;
+  max-width: 100%;
+}
+
+/* The slider is drawn by hand rather than left to `accent-color` above. Chrome
+   honours the accent and gives a round purple thumb, but not every Chromium
+   browser does - Opera ignores it and paints its own light track with a square
+   thumb - and a control that changes shape between browsers is worse than one
+   that ignores the platform everywhere. Both vendor prefixes are needed: the
+   track and thumb are separate pseudo-elements with no shared standard name,
+   and a browser drops the whole rule on a selector it does not recognise, so
+   the two families cannot be merged into one comma-separated list. */
+input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 1.1rem;               /* room for the thumb, which sits above the track */
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;      /* the track pseudo-element paints instead */
+  border: 0;
+  cursor: pointer;
+}
+
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.45rem;
+  background: var(--line);
+  border-radius: 0.25rem;
+}
+
+/* WebKit places the thumb against the top of the track, so it is pulled up by
+   half the difference to sit astride it. Firefox centres it on its own. */
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: -0.275rem;        /* (0.45rem - 1rem) / 2 */
+  background: var(--accent);
+  border: 0;
+  border-radius: 50%;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 0.45rem;
+  background: var(--line);
+  border-radius: 0.25rem;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 1rem;
+  height: 1rem;
+  background: var(--accent);
+  border: 0;
+  border-radius: 50%;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.7rem;
+}
+
+.row > span { margin-right: auto; }
+
+/* Read-out of the slider it follows. The text changes width as the slider moves
+   ("wyłączona" against "120 ms"), so the box is fixed at the widest wording plus
+   a little slack - otherwise the slider would shuffle sideways under the cursor. */
+.row > .range-value {
+  flex: none;
+  min-width: 10ch;              /* "wyłączona" is ~9ch wide in the page font */
+  text-align: right;
+  white-space: nowrap;          /* a longer wording may push, but must not wrap */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Progress of a file going out over the serial line. The fill is animated just
+   enough to look continuous at one step per queued byte, without lagging behind
+   a transfer that finishes in one go. */
+.bar {
+  height: 0.7rem;
+  margin: 0 0 0.7rem;
+  background: #262c32;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  width: 0;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.1s linear;
+}
+
+.bar-fill.done { background: #5fa86a; }
+.bar-fill.aborted { background: #d8b45f; }
+
+/* A number field with its unit spelled out next to it, as one flex item - so a
+   row can hold several without the units drifting away from their boxes. */
+.row > .unit {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.row > .unit input[type="number"] { width: 4.5rem; }
+
+.check {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  margin-bottom: 0.7rem;
+  font-size: 0.85rem;
+}
+
+.check input { margin-top: 0.25rem; flex: none; }
+.check em { display: block; color: var(--muted); font-size: 0.82rem; font-style: normal; }
+
+/* A checkbox painted as a sliding switch. Only the painting is ours - the input
+   keeps its native semantics, so the label that wraps it, the keyboard and the
+   focus ring all work without any script behind them. */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 2.6rem;
+  height: 1.4rem;
+  margin: 0;
+  background: #262c32;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s linear, border-color 0.15s linear;
+}
+
+/* The knob. Vertical centring lives in the same transform as the travel, so the
+   two cannot fight over the property. */
+.switch::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 1rem;
+  height: 1rem;
+  background: var(--muted);
+  border-radius: 50%;
+  transform: translate(0, -50%);
+  transition: transform 0.15s ease, background 0.15s linear;
+}
+
+.switch:checked { background: var(--accent-fill); border-color: var(--accent-line); }
+.switch:checked::after { background: var(--accent); transform: translate(1.2rem, -50%); }
+.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.filebtn {
+  padding: 0.4rem 0.85rem;
+  background: #333b42;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.filebtn:hover { background: #3d464e; }
+.filebtn input { display: none; }
+
+/* Tab strip. The tabs are buttons, so they inherit the button look; what is set
+   here is the strip, the seam between it and the panel, and the one tab that is
+   attached to the panel rather than sitting above it. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-bottom: -1px;              /* the active tab overlaps the panel's edge */
+}
+
+.tabs button {
+  padding: 0.35rem 0.75rem;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  background: #262c32;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.tabs button:hover { background: #333b42; color: var(--text); }
+
+/* The seam: the same background as the panel and no bottom border, so the two
+   read as one shape rather than as a button standing on a box. */
+.tabs button.active {
+  background: var(--panel);
+  border-color: var(--accent-line);
+  border-bottom-color: var(--panel);
+  color: var(--accent);
+}
+
+[role="tabpanel"] {
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.7rem;
+  border: 1px solid var(--accent-line);
+  border-radius: 0 5px 5px 5px;
+}
+
+[role="tabpanel"] table { margin: 0; }
+
+/* ---- modals ------------------------------------------------------------- */
+
+dialog.modal {
+  width: min(75vw, calc(100vw - 2rem));
+  max-height: calc(100vh - 4rem);
+  padding: 1.25rem 1.5rem 1.75rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 12px 48px #000a;
+  overflow-y: auto;
+}
+
+/* Two dialogs keep a width of their own. The applications list is a table that
+   wants every column it can get, and the keyboard map is a fixed drawing that
+   only reads well when the window hugs it. */
+dialog.modal#dlg-apps { width: min(80rem, calc(100vw - 2rem)); }
+dialog.modal#dlg-keys { width: min(38rem, calc(100vw - 2rem)); }
+
+dialog.modal::backdrop { background: #000000b0; }
+
+dialog.modal h2 {
+  margin: 0 0 1rem;
+  padding-right: 2rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+dialog.modal h3 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+dialog.modal h3:first-of-type { margin-top: 0.5rem; }
+
+dialog.modal ol,
+dialog.modal ul {
+  margin: 0 0 0.75rem;
+  padding-left: 1.3rem;
+  font-size: 0.88rem;
+}
+
+dialog.modal li { margin-bottom: 0.2rem; }
+
+dialog.modal p { font-size: 0.88rem; }
+
+.modal-close {
+  float: right;
+  margin: -0.5rem -0.75rem 0 0;
+}
+
+.modal-close button {
+  padding: 0.1rem 0.5rem;
+  font-size: 1.1rem;
+  line-height: 1.3;
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.modal-close button:hover { background: #333b42; color: var(--text); }
+
+/* ---- shared text bits --------------------------------------------------- */
+
+.hint {
+  margin: 0 0 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.hint.warn { color: #d8b45f; }
+
+code {
+  padding: 0 0.2em;
+  background: #00000040;
+  border-radius: 3px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+kbd {
+  padding: 0.05em 0.4em;
+  background: #333b42;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.85em;
+}
+
+a { color: var(--accent); }
+
+/* A button that reads as a link - keeps the existing data-modal wiring while
+   looking like the inline reference it is. */
+button.linklike {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+button.linklike:hover { background: none; color: var(--text); }
+
+/* Licence text is reproduced verbatim, so it must not be reflowed or restyled
+   beyond wrapping to the dialog width. */
+pre.license {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  background: #00000040;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+table.keys {
+  width: 100%;
+  margin-bottom: 0.75rem;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+table.keys th,
+table.keys td {
+  padding: 0.35rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+table.keys th { color: var(--muted); font-weight: 500; }
+
+/* ---- ROM dialog ---------------------------------------------------------- */
+
+.dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1rem;
+  padding: 1.1rem 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  background: #00000030;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+}
+
+/* The whole zone reacts, not just the label - a file dragged over a dashed box
+   should say so before the user lets go of it. */
+.dropzone.over {
+  color: var(--text);
+  background: var(--accent-fill);
+  border-color: var(--accent-line);
+}
+
+table.roms td:first-child { width: 40%; }
+table.roms td.num { text-align: right; white-space: nowrap; }
+table.roms em { display: block; color: var(--muted); font-size: 0.82rem; font-style: normal; }
+table.roms td.ok { color: var(--accent); }
+table.roms td.warn { color: #d8b45f; }
+
+table.hashes td { font-family: ui-monospace, Consolas, monospace; font-size: 0.78rem; }
+table.hashes td.hash { overflow-wrap: anywhere; }
+
+table.credits td { font-size: 0.82rem; }
+table.credits td:first-child { width: 34%; }
+table.credits td:last-child { width: 26%; color: var(--muted); }
+
+/* ---- serial terminal ----------------------------------------------------- */
+
+pre.term {
+  height: 15rem;
+  margin: 0 0 0.7rem;
+  padding: 0.6rem 0.75rem;
+  background: #0d1013;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: #cfd6dc;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+}
+
+.term-input { flex: 1 1 18rem; }
+
+/* A command to copy, not a scrolling view: as tall as its content. */
+pre.cmd {
+  margin: 0 0 0.7rem;
+  padding: 0.5rem 0.75rem;
+  background: #0d1013;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: #cfd6dc;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+table.files td { font-family: ui-monospace, Consolas, monospace; }
+table.files td.num { text-align: right; }
+table.files td.act { text-align: right; white-space: nowrap; }
+
+table.files button {
+  padding: 0.1rem 0.45rem;
+  margin-left: 0.3rem;
+  font-size: 0.78rem;
+}
+
+/* Inspector panes. Monospaced, scrolling on their own, and dark enough that a
+   long hex dump does not glow at the reader. */
+pre.insp {
+  font: 0.78rem/1.35 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  background: #10161b;
+  border: 1px solid #2a3138;
+  border-radius: 4px;
+  padding: 0.5rem 0.6rem;
+  margin: 0.35rem 0 0.8rem;
+  overflow: auto;
+  max-height: 12rem;
+  white-space: pre;
+  color: #b9c6cf;
+}
+pre.insp-log { max-height: 16rem; }
+/* The line that says whether the machine is running, and if it is not, why it
+   stopped. It sits between the controls and the panes and has to be findable
+   at a glance without shouting, so it changes colour only when stopped. */
+p.insp-state {
+  margin: 0 0 0.8rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+p.insp-state.stopped { color: #d8b45f; }
+pre.insp b { color: var(--text); font-weight: 600; }
+pre.insp i { color: #7f8d97; font-style: normal; }
+/* The inspector wants the room: four panes, two of them side by side, and a hex
+   dump that is unreadable the moment it wraps. */
+dialog.modal#dlg-inspect { width: min(90vw, calc(100vw - 2rem)); }
+
+/* Code on the left at about a third, memory taking the rest - a disassembly
+   line is short and a hex dump line is not. Below sixty rem there is no room
+   for two of anything, so they stack. */
+.insp-cols {
+  display: grid;
+  grid-template-columns: 35% minmax(0, 1fr);
+  gap: 0 1.25rem;
+  align-items: start;
+}
+.insp-cols > section { min-width: 0; }
+.insp-cols h3 { margin-top: 0.5rem; }
+/* Side by side there is no reason to scroll either of them: twelve
+   instructions and sixteen dump rows both fit outright. */
+.insp-cols pre.insp { max-height: none; }
+/* The inspector's control strips.
+ *
+ * Three things needed undoing here, all of them inherited from dialogs that use
+ * these classes differently. `.row > span` carries `margin-right: auto` so that
+ * a label can push a control to the far edge, which in the port-log strip threw
+ * the two port boxes and the button to opposite ends of a very wide window.
+ * `.check` aligns to flex-start and reserves a bottom margin, because in the
+ * System window it wraps a heading with a paragraph under it; on one line that
+ * just sits the text low. And the two columns' strips differed in height - one
+ * has a checkbox, the other does not - so the panes under them started at
+ * different places.
+ */
+.row.insp-row {
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  min-height: 2.1rem;           /* the same in both columns, so the panes line up */
+}
+.row.insp-row > span { margin-right: 0; }
+.row.insp-row .check {
+  align-items: center;
+  margin-bottom: 0;
+}
+.row.insp-row .check input { margin-top: 0; }
+.row.insp-row .unit { font-size: 0.85rem; }
+.row.insp-row label { line-height: 1; }
+/* The state slots.
+ *
+ * Three rows that have to read as a table without being one: the label, when the
+ * slot was last written, and the three buttons. `.row > span` carries
+ * `margin-right: auto` so that a label can push a control to the far edge, which
+ * here would throw the buttons to the other side of the dialog and leave the
+ * date floating in the middle - the same trap the inspector's control strips
+ * fell into. Fixed widths on the first two cells line the buttons up down the
+ * column instead.
+ */
+.row.state-row {
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+}
+.row.state-row > span {
+  margin-right: 0;
+  min-width: 6rem;
+}
+.state-when {
+  min-width: 9rem;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.row.state-row button[disabled] { opacity: 0.45; cursor: default; }
+
+@media (max-width: 32rem) {
+  .row.state-row > span, .state-when { min-width: 0; }
+}
+
+@media (max-width: 60rem) {
+  .insp-cols { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ---- EPROM card page (eprom.html) -------------------------------------- */
+
+/* A column of text and controls; the emulator page spans the viewport for the
+   case artwork, this one has nothing that wide. */
+main.page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 0;
+}
+
+main.page > h2,
+.bank h2 {
+  margin: 1.5rem 0 0.75rem;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.hint.ok { color: var(--accent); }
+
+.banks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 30rem), 1fr));
+  gap: 1rem;
+}
+
+.bank {
+  min-width: 0;
+  padding: 0 1rem 0.5rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.bank h2 { margin-top: 0.9rem; }
+
+.bank h2 small {
+  margin-left: 0.4rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.bank .bank-label { width: 11em; text-transform: uppercase; }
+
+/* The file list scrolls on its own, so a full bank does not push the next one
+   a screen further down. */
+.bank table.bank-list {
+  display: block;
+  max-height: 22rem;
+  overflow: auto;
+  margin-bottom: 0.75rem;
+  font-size: 0.82rem;
+  border-collapse: collapse;
+}
+
+.bank table.bank-list td {
+  padding: 0.15rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.bank table.bank-list td:first-child { width: 100%; white-space: normal; }
+
+/* The name the file had before it was cut down to 8.3. */
+.bank small.orig {
+  margin-left: 0.4rem;
+  color: var(--muted);
+  font-family: system-ui, "Segoe UI", sans-serif;
+}
+
+.bank-actions { justify-content: flex-end; }
+
+/* Yes/no questions in a modal of the page's own (js/ui/confirm.js): narrow,
+   because it holds one sentence and two buttons. */
+dialog.modal.confirm { width: min(30rem, calc(100vw - 2rem)); padding-bottom: 1.25rem; }
+dialog.modal.confirm p { margin: 0; font-size: 0.92rem; }
+.confirm-actions { justify-content: flex-end; margin: 1.25rem 0 0; }

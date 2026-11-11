@@ -1,0 +1,134 @@
+Portfoliator — a browser-based Atari Portfolio emulator
+
+Copyright (c) 2026 dely / bjb / ng
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+===============================================================================
+THIRD-PARTY COMPONENTS
+===============================================================================
+
+This project includes code and assets from other authors, each under its own
+license. The notices below are a condition of distributing this work in
+executable form (including, among other things, this website) and must be
+carried along with it.
+
+--- MAME (BSD-3-Clause) --------------------------------------------------------
+
+This emulator's hardware model was reconstructed from MAME source files
+marked `license:BSD-3-Clause`. The code is a JavaScript reimplementation, not
+a copy, but the algorithms, constant tables, and register layouts come from
+those files — some tables (e.g. the PCD3311 tone frequencies) were copied
+over directly. The notices below fall under the same license text as the one
+given above.
+
+Copyright (c) Curt Coder
+    src/mame/atari/pofo.cpp
+    src/devices/video/hd61830.cpp, hd61830.h
+    src/devices/sound/pcd3311.cpp, pcd3311.h
+    src/devices/bus/pofo/ccm.cpp, exp.cpp, hpc101.cpp, hpc102.cpp, hpc104.cpp
+
+Copyright (c) Curt Coder, Jaen Saul
+    src/mame/atari/pofo_kbd.cpp
+
+Copyright (c) smf, Carl
+    src/devices/machine/ins8250.cpp, ins8250.h
+
+These files' headers give the rights holders without stating years. The MAME
+project as a whole carries the notice `Copyright (c) 1997-2026 MAMEDev and
+contributors`. Project site: https://www.mamedev.org/
+
+--- MartyPC (MIT) ---------------------------------------------------------------
+
+The CPU core, js/emu/cpu8088.js, and its decode table, js/emu/cpu8088-decode.js,
+are a JavaScript port of the 808x core of MartyPC
+(https://github.com/dbalsom/martypc, crates/lib/marty_core/src/cpu_808x), made
+function for function; the decode table was generated from its decode.rs.
+
+Copyright 2022-2026 Daniel Balsom
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+--- SingleStepTests 8088 (MIT) ---------------------------------------------------
+
+https://github.com/SingleStepTests/8088 - per-clock recordings of a real 8088,
+used to verify the CPU core (tools/tests/cpu-sst.mjs). The test data is not part
+of this repository; no file from it was copied, so it is listed here out of
+thoroughness, not license obligation.
+
+--- TeX Gyre Schola (GUST Font Licence) -----------------------------------------
+
+The typeface used in the page header — fonts/century-schoolbook-italic.*. A
+free clone of Century Schoolbook (Morris Fuller Benton, 1919) by the GUST
+e-foundry. The GUST Font Licence is legally identical to the LaTeX Project
+Public License, version 1.3c or later; full text in
+fonts/GUST-FONT-LICENSE.txt and at
+https://www.gust.org.pl/fonts/licenses/GUST-FONT-LICENSE.txt
+
+--- PofoManager (Apache-2.0) -----------------------------------------------------
+
+https://github.com/codaris/PofoManager
+
+Used solely as documentation for the parallel-port file transfer protocol
+(framing, checksums, command codes). No code or file from this project was
+copied, so no derivative work resulted — it's listed here out of
+thoroughness, not license obligation.
+
+
+===============================================================================
+WHAT'S NOT PART OF THIS PROJECT
+===============================================================================
+
+rom/        The ROM files and DIP-DOS are property of Atari Corp. and DIP
+            Ltd. They are not distributed with this project — you must
+            supply your own dump. The emulator accepts one through the
+            browser and keeps it in local storage; the files are read on
+            your machine and are never uploaded anywhere. Neither this
+            project nor a deployment of it redistributes them.
+
+software/   Third-party programs used for testing, each under its own
+cards/      author's terms. Not covered by this license.
+
+gfx/        The case artwork is the project author's own work and covered
+            by the license above. It depicts Atari hardware, though — the
+            Atari names and trademarks belong to their owners and are used
+            here purely descriptively.

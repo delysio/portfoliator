@@ -1,0 +1,1335 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n>Portfoliator — emulator Atari Portfolio</title>
+<script src="js/boot.js"></script>
+</head>
+<body>
+
+<header>
+  <!-- Bilingual on purpose: whichever language you are lost in, one of the two
+       labels is the one you are looking for. -->
+  <div class="lang" role="group" aria-label="Język / Language">
+    <button type="button" id="lang-pl">PL</button>
+    <button type="button" id="lang-en">EN</button>
+  </div>
+
+  <h1 data-i18n>Portfoliator</h1>
+  <p class="sub" data-i18n>Emulator Atari Portfolio (80C88 @ 4.9152 MHz, DIP&nbsp;DOS 2.11)</p>
+</header>
+
+<main>
+  <div class="lcd-case">
+    <div class="shell" id="shell">
+      <canvas id="screen" width="240" height="80"></canvas>
+    </div>
+  </div>
+
+  <nav class="toolbar">
+    <button data-modal="dlg-system" data-i18n>System</button>
+    <button data-modal="dlg-card" data-i18n>Karta pamięci</button>
+    <button data-modal="dlg-print" data-i18n>Port równoległy</button>
+    <button data-modal="dlg-serial" data-i18n>Port szeregowy</button>
+    <button data-modal="dlg-keys" data-i18n>Klawiatura</button>
+    <button data-modal="dlg-apps" data-i18n>Aplikacje</button>
+    <button data-modal="dlg-state" data-i18n>Stan maszyny</button>
+    <button data-modal="dlg-inspect" data-i18n>Inspektor</button>
+    <button data-modal="dlg-manual" class="primary" data-i18n>Instrukcja</button>
+  </nav>
+
+  <div class="statusbar">
+    <span><span data-i18n>Stan:</span> <b id="status" data-i18n>inicjalizacja…</b></span>
+    <span><span data-i18n>Szybkość:</span> <b id="speed">—</b></span>
+    <span><span data-i18n>Bufor wydruku:</span> <b id="print-bytes">0</b> B</span>
+    <span id="instance-note" class="warn" hidden></span>
+  </div>
+</main>
+
+
+<dialog id="dlg-system" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>System</h2>
+
+  <div class="row">
+    <button id="btn-reset" data-i18n>Reset (ciepły)</button>
+    <button id="btn-cold" class="danger" data-i18n>Zimny start</button>
+    <button data-modal="dlg-rom" data-i18n>Pliki ROM…</button>
+  </div>
+
+  <label class="check">
+    <input type="checkbox" id="opt-ramrandom" checked>
+    <span data-i18n-html>Zimny start z losową pamięcią RAM
+      <em>Prawdziwe Portfolio budzi się z pamięcią pełną <b>resztek</b> — komórki
+      trzymają ładunek jeszcze chwilę po wyjęciu baterii, a to, co przetrwa, nie
+      jest ani zerami, ani dwa razy takie samo. Emulator domyślnie daje równiutkie
+      zera, więc program, który czyta pamięć, zanim cokolwiek do niej zapisze,
+      zachowuje się tu inaczej niż na sprzęcie — i różnicy nie widać, dopóki nie
+      zaboli. Włącz, żeby <b>zimny start</b> wypełniał pamięć losowo: dwa
+      uruchomienia przestaną być identyczne, a błąd zależny od śmieci w pamięci
+      dostaje szansę ujawnić się również tutaj. Działa od <b>następnego zimnego
+      startu</b> — przesypywanie pamięci pod działającym programem niczego by nie
+      odtworzyło, tylko go wywróciło. Pamięci rozszerzenia (dysk B:) opcja nie
+      rusza, tak samo jak zwykły zimny start.</em>
+    </span>
+  </label>
+
+  <label class="row">
+    <span data-i18n>Wierność układu LCD</span>
+    <select id="opt-lcdtiming">
+      <option value="off" data-i18n>Bierze wszystko — nierealistyczne</option>
+      <option value="threshold" selected data-i18n>Zgodne z oryginalnym sprzętem</option>
+    </select>
+  </label>
+  <p class="hint" data-i18n-html>Kontroler HD61830 dzieli pamięć obrazu z odświeżaniem panelu i
+    po zapisie danych <b>potrzebuje chwili</b>. Dostęp, który przyjdzie wcześniej niż po 50
+    cyklach, jest źle obsłużony — a co się wtedy stanie, zależy od tego, co przyszło. Kolejny
+    <b>zapis danych</b> przepada, a że licznik adresu wtedy stoi, wiersz nie robi się dziurawy,
+    tylko urywa. <b>Zapis instrukcji</b> łapie bajt jeszcze w locie i wciąga go do rejestru <b>sterowania
+    trybem</b>: gaśnie tryb graficzny i panel czyta pamięć jak kody znaków, albo gaśnie samo
+    wyświetlanie i panel pustoszeje. Pamięć obrazu zostaje przy tym nietknięta, i tak jest aż do
+    ponownego zaprogramowania układu. Rzadziej — mniej więcej raz na sześćdziesiąt — spóźniona instrukcja nie przewraca rejestru, tylko gubi sam bajt, i w wierszu zostaje <b>ośmiopikselowy ząbek</b> z tym, co w komórce było wcześniej. Tak właśnie wyglądają <b>śmieci</b>, które
+    prawdziwe Portfolio pokazuje przy programie piszącym za szybko. Próg jest <b>zmierzony na sprzęcie</b>: zapis co 46
+    cykli gubi bajty, co 54 już nie — po sześć uruchomień w każdą stronę. Ominąć się tego nie
+    da, bo <b>interfejs jest tylko do zapisu</b> — odczyt obu portów zwraca młodszy bajt adresu,
+    <code>10h</code> i <code>11h</code>, więc żaden program nie sprawdzi, czy bajt dotarł.
+    <b>Zgodne z oryginalnym sprzętem</b> trzyma się tej reguły i pokazuje skutki jej łamania — dokładnie to, co zobaczyłbyś na prawdziwym Portfolio. <b>Bierze wszystko</b> przyjmuje każdy zapis natychmiast: ekran zostaje czysty, ale takiego układu nigdy nie było. Zostaje do diagnostyki — gdy obraz wygląda źle, przełączenie od razu mówi, czy winne są czasy.</p>
+
+  <label class="row">
+    <span data-i18n>Skala obrazu</span>
+    <select id="opt-scale">
+      <option value="1">1×</option>
+      <option value="2" selected>2×</option>
+      <option value="3">3×</option>
+      <option value="4">4×</option>
+    </select>
+  </label>
+
+  <label class="row">
+    <span data-i18n>Bezwładność ekranu</span>
+    <input type="range" id="opt-inertia" min="0" max="300" step="10" value="50">
+    <b id="inertia-value" class="range-value" data-i18n>50 ms</b>
+  </label>
+  <p class="hint" data-i18n-html>Matryca Portfolio to ciekły kryształ z 1989 roku — punkt nie
+    zapala się i nie gaśnie natychmiast, tylko dochodzi do nowego stanu przez
+    kilkadziesiąt–kilkaset milisekund. Dlatego przewijany tekst zostawia na
+    prawdziwym urządzeniu smugę, a kursor nie mruga ostro, tylko faluje.
+    Suwak ustawia stałą czasową zapalania punktu (po tym czasie punkt jest
+    ciemny w ok.&nbsp;63%); gaszenie trwa o&nbsp;60% dłużej, bo powrót ciekłego
+    kryształu do stanu spoczynku jest wolniejszy niż wysterowanie go napięciem.
+    <b>0</b> wyłącza efekt i&nbsp;daje ostry obraz, jak w&nbsp;emulatorze MAME.
+    Wartości są dobrane „na oko”, nie z pomiaru konkretnego egzemplarza —
+    ustaw to, co wygląda jak Twoje Portfolio: im wyżej, tym bardziej wyziębiony
+    i&nbsp;rozmazany ekran.</p>
+
+  <label class="row">
+    <span data-i18n>Kształt narastania</span>
+    <select id="opt-rise">
+      <option value="0" selected data-i18n>0 — twardy start, bez dociągania</option>
+      <option value="1" data-i18n>1 — twardy start + długie dociąganie</option>
+      <option value="2" data-i18n>2 — miękki start (krzywa S), bez dociągania</option>
+      <option value="3" data-i18n>3 — miękki start + długie dociąganie</option>
+    </select>
+  </label>
+  <p class="hint" data-i18n-html>Jak punkt dochodzi do nowego stanu; tempo nadaje suwak
+    powyżej, a tu wybiera się kształt drogi. <b>Start:</b> twardy znaczy, że punkt rusza
+    najszybciej w chwili zapalenia; miękki — że przez moment nie dzieje się nic,
+    a dopiero potem punkt nabiera rozpędu. <b>Dociąganie:</b> bez niego punkt
+    dochodzi do pełnej czerni jednym ruchem; z długim dociąganiem 45% drogi
+    bierze na siebie składowa cztery razy wolniejsza, więc punkt widać od razu,
+    ale blady, a pełne nasycenie przychodzi dużo później. Przy suwaku 50&nbsp;ms
+    pierwsza klatka daje kolejno 28%, 19%, 8% i&nbsp;8% czerni, a pełną czerń punkt
+    osiąga po 316, 1250, 416 i&nbsp;1250&nbsp;ms. Gaszenie w&nbsp;każdym wariancie
+    trwa o&nbsp;60% dłużej niż zapalanie. Kształt, tak jak tempo, jest dobrany na oko,
+    a nie zmierzony — wybierz ten, który wygląda jak Twoje Portfolio.</p>
+
+  <label class="row">
+    <span data-i18n>Siatka pikseli</span>
+    <input type="range" id="opt-grid" min="0" max="30" step="1" value="10">
+    <b id="grid-value" class="range-value" data-i18n>10%</b>
+  </label>
+  <p class="hint" data-i18n-html>Punkt na matrycy Portfolio nie styka się z sąsiadem — każdy ma
+    własną elektrodę, a między nimi biegnie <b>niesterowana przerwa</b>, przez którą widać samo
+    podłoże panelu. Dlatego obraz na szkle ma widoczną <b>kratkę</b>, i to niezależnie od tego,
+    co akurat wyświetla. Suwak ustawia szerokość tej przerwy jako <b>udział w podziałce</b>:
+    <b>0</b> zestawia punkty ze sobą, czyli daje jednolitą płachtę, jaką emulator pokazywał
+    wcześniej. Wartość nie jest zmierzona na sprzęcie — dokumentacja nie podaje wymiarów
+    matrycy, a bez nich każda liczba byłaby zmyślona; ustaw to, co zgadza się ze zdjęciem
+    Twojego egzemplarza.
+    Przerwa rysowana jest <b>pokryciem</b>, a nie całymi pikselami ekranu: gdy krawędź punktu
+    wypada w połowie piksela, piksel wychodzi w połowie ciemny. Dzięki temu kratka zostaje
+    równa także przy powiększeniu systemowym 125% czy 150%, gdzie na jeden punkt przypada
+    <b>ułamek piksela</b> i podział na całe piksele dawałby falujące prążki. Ubocznie znika
+    przy tym stara nierówność: bez siatki punkty też bywały szersze i&nbsp;węższe, tyle że
+    nie było tego po czym poznać.</p>
+
+  <label class="row">
+    <span data-i18n>Dźwięk (PCD3311T)</span>
+    <input type="checkbox" class="switch" id="opt-audio" role="switch">
+  </label>
+
+  <!-- Everything that only matters once sound is actually coming out. -->
+  <div id="audio-options" hidden>
+    <label class="row">
+      <span data-i18n>Głośność</span>
+      <input type="range" id="opt-volume" min="0" max="100" value="40">
+    </label>
+
+    <label class="row">
+      <span data-i18n>Barwa</span>
+      <select id="opt-timbre">
+        <option value="speaker" selected data-i18n>Jak w Portfolio (miękka, telefoniczna)</option>
+        <option value="raw" data-i18n>Surowa fala prostokątna</option>
+      </select>
+    </label>
+    <p class="hint" data-i18n>PCD3311T to układ do generowania tonów telefonicznych i ma
+      wbudowany filtr — jego wyjście jest bliskie sinusowi, a nie ostrej fali
+      prostokątnej. Do tego mały głośniczek w plastikowej obudowie obcina i dół,
+      i górę pasma. Pierwsza opcja odtwarza cały ten łańcuch i brzmi tak, jak
+      prawdziwy Portfolio; druga to surowy prostokąt, bez filtrowania — ostrzejszy
+      i bardziej piskliwy, za to identyczny z tym, co generuje emulator MAME.</p>
+  </div>
+
+  <p class="hint" id="audio-hint" data-i18n>Przeglądarka blokuje dźwięk do pierwszej
+    interakcji — przestaw przełącznik.</p>
+
+  <label class="check">
+    <input type="checkbox" id="opt-systick">
+    <span data-i18n-html>Przerwanie zegara systemowego
+      <em>Wektor <code>08h</code>, ten sam co IRQ0 w PC. Prędkość <b>ustawia
+      maszyna, nie Ty</b>: Portfolio ma dokładnie dwie — raz na sekundę albo raz
+      na 128 sekund — i przełącza się między nimi funkcją <code>INT&nbsp;61h</code>
+      <code>1Eh</code>, zapisem do portu <code>8040h</code>. BIOS przy każdym
+      starcie wybiera tryb <b>wolny</b>, oszczędzający baterie; program, który
+      poprosi o tik co sekundę, dostanie go co sekundę. Odznacz, jeśli chcesz
+      przerwanie zegara wyciszyć zupełnie — wtedy nie nadejdzie <b>w ogóle</b>,
+      bo poza tym nic w emulatorze go nie generuje.</em>
+    </span>
+  </label>
+
+  <label class="row">
+    <span data-i18n>Zasypianie po bezczynności</span>
+    <select id="opt-standby">
+      <option value="0" data-i18n>Nigdy — emulator czeka w nieskończoność</option>
+      <option value="2" selected data-i18n>Jak prawdziwe Portfolio (128–256 s)</option>
+      <option value="4" data-i18n>Dłużej — ok. 4–9 min</option>
+      <option value="8" data-i18n>Dużo dłużej — ok. 9–18 min</option>
+    </select>
+  </label>
+  <p class="hint" data-i18n-html>Prawdziwe Portfolio samo odcina zasilanie, kiedy przez kilka minut
+    nikt nie naciśnie klawisza — i <b>nie robi tego ROM, tylko układ ASIC</b>. BIOS,
+    czekając na klawisz, wchodzi w stan czuwania zapisem do portu <code>8030h</code>
+    i zatrzymuje procesor; odliczanie prowadzi sprzęt, licznikiem o ziarnistości
+    128&nbsp;sekund. Stąd zapis w dokumentacji DIP-a „zawsze między 128 a 256
+    sekund” — wychodzi jeden albo dwa pełne okresy, zależnie od tego, kiedy padło
+    ostatnie stuknięcie. Na egzemplarzu autora zmierzono ok. 230&nbsp;s.</p>
+  <p class="hint" data-i18n-html><b>Ekran gaśnie, a maszyna staje</b> — dokładnie jak po odcięciu
+    zasilania. <b>Budzi ją dowolny klawisz</b> i sesja toczy się dalej od tego samego
+    miejsca, bez restartu. Domyślnie wyłączone, żeby emulator zostawiony w otwartej
+    karcie nie gasł w trakcie czytania; włącz, jeśli chcesz zachowania zgodnego ze
+    sprzętem. Polecenie <code>OFF</code> to osobna droga — gasi maszynę głębiej,
+    ale klawisz budzi i z niej.</p>
+</dialog>
+
+
+<dialog id="dlg-rom" class="modal">
+  <form method="dialog" class="modal-close" id="rom-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Pliki ROM</h2>
+
+  <p class="hint" data-i18n-html><b>ROM Portfolio oraz DIP-DOS są własnością Atari Corp. i DIP&nbsp;Ltd.
+    i nie wchodzą w skład tego projektu.</b> Żeby uruchomić emulator, trzeba dostarczyć
+    własny zrzut — z posiadanego egzemplarza albo z innego źródła, do którego masz
+    prawo. Ten projekt nie rozpowszechnia tych plików i nie podpowiada, skąd je wziąć.</p>
+
+  <p class="hint" data-i18n-html>Pliki są odczytywane <b>wyłącznie w Twojej przeglądarce</b> i zostają
+    zapamiętane w jej magazynie lokalnym (IndexedDB), razem z dyskiem <code>C:</code>
+    i kartami. Nic nie jest nigdzie wysyłane — ta strona nie ma dokąd tego wysłać.
+    Przy kolejnej wizycie emulator wystartuje od razu, bez ponownego pytania; jeśli
+    jednak przeglądarka blokuje dane witryn albo działa w trybie prywatnym, zapyta
+    znowu. Szczegóły w <b>Instrukcji</b>, w sekcji „Gdzie zapisuje się stan".</p>
+
+  <div id="rom-drop" class="dropzone">
+    <label class="filebtn"><span data-i18n>Wskaż pliki…</span><input type="file" id="rom-file" multiple></label>
+    <span data-i18n>albo upuść je tutaj — można wszystkie naraz</span>
+  </div>
+
+  <table class="keys roms" id="rom-list"></table>
+
+  <p class="hint" id="rom-status"></p>
+
+  <p class="hint warn" id="rom-untested" hidden data-i18n-html>Co najmniej jeden plik pochodzi
+    z nietestowanej rewizji ROM-u. Emulator go uruchomi, ale działanie nie jest
+    gwarantowane — <b>na własną odpowiedzialność</b>.</p>
+
+  <div class="row">
+    <button id="btn-rom-start" class="primary" disabled data-i18n>Uruchom</button>
+    <button id="btn-rom-dir" data-i18n-html>Wczytaj z katalogu <code>rom/</code></button>
+    <button id="btn-rom-clear" class="danger" data-i18n>Usuń zapamiętane</button>
+  </div>
+
+  <p class="hint" data-i18n-html>Nazwy plików nie mają znaczenia — emulator rozpoznaje je po zawartości,
+    więc myląca kolejność <code>u3</code>/<code>u4</code> nie ma jak zaszkodzić. Sklejony
+    zrzut obu ROM-ów systemowych (262&nbsp;144&nbsp;B) też zostanie przyjęty i podzielony
+    automatycznie.</p>
+
+  <p class="hint"><span data-i18n>Emulator testowano wyłącznie z rewizją DIP-DOS 2.11 / ROM v1.072. Inne
+    rewizje uruchomi, ale bez gwarancji działania — na własną odpowiedzialność.</span>
+    <button class="linklike" id="btn-rom-hashes" data-i18n>Sumy kontrolne testowanych plików →</button></p>
+</dialog>
+
+
+<dialog id="dlg-rom-hashes" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Testowane rewizje ROM-u</h2>
+
+  <p class="hint" data-i18n-html>To jedyne zrzuty, z którymi ten emulator był sprawdzany —
+    DIP-DOS 2.11, ROM v1.072. Każdy inny plik o właściwym rozmiarze i strukturze
+    również zostanie uruchomiony, ale <b>bez żadnej gwarancji działania, na własną
+    odpowiedzialność</b>. Jeśli zgłaszasz błąd, dopisz w opisie sumę SHA-256 swoich
+    plików — bez tego nie da się odróżnić błędu emulatora od innej rewizji ROM-u.</p>
+
+  <table class="keys hashes" id="rom-hashes"></table>
+
+  <p class="hint" data-i18n-html>CRC32 podano dlatego, że w tym formacie romsety opisują katalogi
+    MAME — porównanie nie wymaga wtedy liczenia czegokolwiek. Emulator rozstrzyga po
+    SHA-256; CRC32 służy mu za zapasowe kryterium tam, gdzie przeglądarka nie
+    udostępnia <code>crypto.subtle</code> (połączenie inne niż HTTPS albo
+    <code>localhost</code>).</p>
+</dialog>
+
+
+<dialog id="dlg-card" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Karta pamięci (napęd A:)</h2>
+
+  <p class="hint" data-i18n-html>Karta pamięci to wymienny nośnik widoczny w Portfolio jako napęd
+    <b>A:</b> — osobny od wbudowanego dysku C:. Tutaj można stworzyć nową, pustą
+    kartę i od razu ją sformatować; wgrać gotowy obraz karty, np. pobrany wcześniej
+    albo przygotowany przez kogoś innego; dorzucić na kartę pliki prosto z dysku
+    swojego komputera, bez dotykania klawiatury Portfolio; oraz pobrać aktualną
+    zawartość jako plik — żeby zrobić kopię zapasową albo przenieść kartę na inny
+    komputer. Tak przygotowana karta jest w pełni zgodna z tym, czego oczekuje
+    oryginalny system Portfolio — da się ją też w każdej chwili wysunąć
+    i włożyć ponownie, jak prawdziwą.</p>
+
+  <div class="row">
+    <span data-i18n>Nowa karta</span>
+    <select id="card-size">
+      <option value="32768" data-i18n>32 KB</option>
+      <option value="65536" data-i18n>64 KB</option>
+      <option value="131072" selected data-i18n>128 KB</option>
+      <option value="262144" data-i18n>256 KB</option>
+    </select>
+    <button id="btn-new-card" data-i18n>Utwórz i sformatuj</button>
+  </div>
+
+  <div class="row">
+    <label class="filebtn"><span data-i18n>Wgraj obraz…</span><input type="file" id="card-file" accept=".img,.bin,.rom,.ccm,.epr"></label>
+    <label class="filebtn"><span data-i18n>Dodaj pliki…</span><input type="file" id="card-add" multiple></label>
+    <button id="btn-save-card" data-i18n>Pobierz obraz</button>
+    <button id="btn-eject" data-i18n>Wysuń</button>
+  </div>
+
+  <label class="check">
+    <input type="checkbox" id="opt-card-rw" checked>
+    <span data-i18n-html>Karta zapisywalna
+      <em>Włączone domyślnie — Portfolio może na niej zapisywać, kasować
+      i formatować pliki, tak jak na zwykłej karcie RAM. Odznacz tylko wtedy, gdy
+      chcesz sprawdzić, jak zachowa się oprogramowanie na karcie tylko do odczytu
+      (ROM/OTPROM) — Portfolio zobaczy wtedy próby zapisu jako błąd, dokładnie jak
+      przy prawdziwej karcie tego typu.</em>
+    </span>
+  </label>
+
+  <p class="hint" id="card-info" data-i18n>Brak karty.</p>
+
+  <p class="hint" data-i18n-html>Obraz dla karty z&nbsp;EPROM-em, z&nbsp;kilkoma bankami po 128&nbsp;KB, przygotujesz na stronie <a href="eprom.html">Karta EPROM</a>; każdy bank wgrasz tu jak zwykłą kartę.</p>
+  <table class="keys files" id="card-files"></table>
+
+  <p class="hint warn" id="card-warn" hidden data-i18n-html>Zawartość karty zmieniona z poziomu
+    hosta — zrób <b>Reset</b>, żeby DOS nie użył starej kopii FAT.</p>
+
+  <h3 data-i18n>Rozszerzenie HPC-104 (drugi slot, napęd B:)</h3>
+
+  <p class="hint" data-i18n-html>HPC-104 to oryginalne rozszerzenie, które dokładało Portfolio
+    <b>drugi slot na kartę</b> — widoczny w systemie jako napęd <b>B:</b> — oraz
+    <b>256&nbsp;KB dodatkowej pamięci</b>. Dzięki niemu można mieć dwie karty naraz
+    i kopiować pliki prosto z jednej na drugą, poleceniem
+    <code>COPY&nbsp;A:*.*&nbsp;B:</code>. Rozszerzenie ma przelotkę, więc drukarka
+    albo port szeregowy nadal działają podłączone za nim.</p>
+
+  <label class="check">
+    <input type="checkbox" id="opt-hpc104">
+    <span data-i18n-html>Podłącz rozszerzenie HPC-104
+      <em>Daje drugi slot (napęd B:) oraz 256&nbsp;KB dodatkowej pamięci —
+      ta druga działa niezależnie od karty, także przy pustym slocie. Obie rzeczy
+      wymagają restartu, ale <b>innego</b>; szczegóły w ramce poniżej.</em>
+    </span>
+  </label>
+
+  <div id="hpc104-panel" hidden>
+    <p class="hint warn" data-i18n-html><b>Dwie rzeczy, dwa różne restarty.</b> Napęd
+      <code>B:</code> pojawia się już po zwykłym <b>Resecie</b> — bez niego
+      <code>DIR B:</code> pokaże tylko <code>Insert disk for drive B:</code>.
+      Natomiast dodatkowe 256&nbsp;KB pamięci liczone jest wyłącznie przy
+      <b>Zimnym starcie</b>: ciepły Reset zostawia starą wartość, więc
+      <code>CHKDSK</code> dalej pokaże 126&nbsp;976&nbsp;B zamiast
+      389&nbsp;120&nbsp;B. Zimny start <b>kasuje zawartość dysku C:</b>, więc
+      wcześniej zgraj z niego, co chcesz zachować. Karty w slotach A: i B:
+      przetrwają go bez zmian.</p>
+    <div class="row">
+      <button id="btn-hpc104-cold" class="danger" data-i18n>Zimny start (przelicz pamięć)</button>
+      <button id="btn-hpc104-reset" data-i18n>Reset (podłącz napęd B:)</button>
+    </div>
+
+    <div class="row">
+      <span data-i18n>Nowa karta w slocie B:</span>
+      <select id="cardb-size">
+        <option value="32768" data-i18n>32 KB</option>
+        <option value="65536" data-i18n>64 KB</option>
+        <option value="131072" selected data-i18n>128 KB</option>
+      <option value="262144" data-i18n>256 KB</option>
+      </select>
+      <button id="btn-new-cardb" data-i18n>Utwórz i sformatuj</button>
+    </div>
+
+    <div class="row">
+      <label class="filebtn"><span data-i18n>Wgraj obraz…</span><input type="file" id="cardb-file" accept=".img,.bin,.rom,.ccm,.epr"></label>
+      <label class="filebtn"><span data-i18n>Dodaj pliki…</span><input type="file" id="cardb-add" multiple></label>
+      <button id="btn-save-cardb" data-i18n>Pobierz obraz</button>
+      <button id="btn-eject-b" data-i18n>Wysuń</button>
+    </div>
+
+    <label class="check">
+      <input type="checkbox" id="opt-cardb-rw" checked>
+      <span data-i18n-html>Karta zapisywalna
+        <em>Tak samo jak w slocie A: odznacz, żeby udawać kartę tylko do odczytu.</em>
+      </span>
+    </label>
+
+    <p class="hint" id="cardb-info" data-i18n>Brak karty.</p>
+    <table class="keys files" id="cardb-files"></table>
+
+    <p class="hint warn" id="cardb-warn" hidden data-i18n-html>Zawartość karty zmieniona z poziomu
+      hosta — zrób <b>Reset</b>, żeby DOS nie użył starej kopii FAT.</p>
+  </div>
+</dialog>
+
+
+<dialog id="dlg-print" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Port równoległy (HPC-101)</h2>
+
+  <p class="hint" data-i18n-html>Ten sam kabel łączy dwie zupełnie różne funkcje. Portfolio może
+    przez niego <b>drukować</b>, tak jakby po drugiej stronie stała prawdziwa
+    drukarka, albo <b>wymieniać pliki</b> z działającym systemem. Nie trzeba
+    niczego przełączać ręcznie — Portfolio samo rozpoznaje, do czego akurat
+    używasz portu, po tym, jakie polecenie wydasz.</p>
+
+  <label class="check">
+    <input type="checkbox" id="opt-parallel">
+    <span data-i18n-html>Podłącz interfejs równoległy
+      <em>Portfolio sprawdza, co jest podłączone do gniazda rozszerzeń, tylko raz —
+      przy starcie systemu. Jeśli zmienisz to ustawienie w trakcie pracy, zrób
+      Reset, żeby Portfolio zauważyło urządzenie.</em>
+    </span>
+  </label>
+
+  <div class="row">
+    <button id="btn-print-reset" data-i18n>Reset (wykryj interfejs)</button>
+  </div>
+
+  <!-- Nothing below matters until the interface is fitted. -->
+  <div id="parallel-panel" hidden>
+    <h3 data-i18n>Drukowanie do pliku</h3>
+    <p class="hint" data-i18n-html>Wszystko, co w Portfolio wysłałbyś normalnie do drukarki, trafia
+      tutaj do bufora zamiast na papier. W dowolnym momencie możesz zamknąć wydruk
+      i ściągnąć jego treść jako zwykły plik tekstowy. W systemie Portfolio
+      wystarczy np. <code>DIR &gt; PRN</code> albo <code>COPY PLIK.TXT PRN</code>.</p>
+    <div class="row">
+      <button id="btn-print" data-i18n>Zakończ wydruk i pobierz plik</button>
+    </div>
+
+    <h3 data-i18n>Transfer plików</h3>
+    <p class="hint" data-i18n-html>Pozwala przenosić pliki między komputerem a działającym
+      Portfolio bez restartu i bez podmieniania karty pamięci. Zanim zaczniesz,
+      przełącz Portfolio w tryb odbioru: przytrzymaj <kbd>`</kbd>, wciśnij
+      <kbd>S</kbd>, a potem wybierz <b>File transfer</b> → <b>Server</b>. Gdy
+      na ekranie Portfolio pojawi się <code>Waiting for connection</code>,
+      urządzenie czeka gotowe na plik.</p>
+
+    <div class="row">
+      <label class="filebtn"><span data-i18n>Wyślij pliki…</span><input type="file" id="link-file" multiple></label>
+      <button id="btn-link-list" data-i18n>Pokaż pliki na Portfolio</button>
+    </div>
+
+    <label class="row">
+      <span data-i18n>Katalog docelowy / maska</span>
+      <input type="text" id="link-dest" value="C:\" size="14">
+    </label>
+    <p class="hint" data-i18n-html>To pole ma dwie role. Przy wysyłaniu mówi, do jakiego katalogu
+      na Portfolio mają trafić pliki (domyślnie <code>C:\</code>). Przy podglądzie
+      — czyli po kliknięciu „Pokaż pliki na Portfolio” — można wpisać też maskę,
+      np. <code>C:\*.TXT</code>, <code>A:\*.*</code> albo <code>C:\SYSTEM\*.*</code>,
+      żeby zobaczyć tylko wybrane pliki; sam katalog bez maski dostaje automatycznie
+      <code>*.*</code>. Jedno ograniczenie: Portfolio potrafi w ten sposób podać
+      <b>wyłącznie same nazwy plików</b> — bez rozmiarów, dat i bez zawartości
+      podkatalogów.</p>
+
+    <p class="hint" id="link-status" data-i18n>Gotowe.</p>
+    <table class="keys files" id="link-files"></table>
+  </div>
+</dialog>
+
+
+<dialog id="dlg-serial" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Port szeregowy (HPC-102)</h2>
+
+  <p class="hint" data-i18n-html>To druga droga, którą Portfolio może rozmawiać ze światem
+    zewnętrznym — kablem RS-232 zamiast równoległym. System Portfolio widzi go
+    jako urządzenie <code>AUX</code>, więc polecenia w rodzaju
+    <code>ECHO&nbsp;coś&nbsp;&gt;&nbsp;AUX</code> działają od razu po Resecie, bez
+    żadnej dodatkowej konfiguracji. Domyślna prędkość to 2400 bodów — jeśli
+    zmienisz ją w Portfolio, dopasuj też ustawienia po drugiej stronie kabla.</p>
+
+  <label class="check">
+    <input type="checkbox" id="opt-serial">
+    <span data-i18n-html>Podłącz interfejs szeregowy
+      <em>Portfolio sprawdza, co jest podłączone do gniazda rozszerzeń, tylko
+      raz — przy starcie systemu, więc po zmianie tej opcji zrób Reset. Uwaga:
+      port szeregowy i równoległy dzielą to samo gniazdo, więc mogą działać
+      tylko pojedynczo — włączenie tego wyłącza tamten.</em>
+    </span>
+  </label>
+
+  <div class="row">
+    <button id="btn-serial-reset" data-i18n>Reset (wykryj interfejs)</button>
+  </div>
+
+  <!-- Nothing below matters until the interface is fitted. -->
+  <div id="serial-panel" hidden>
+    <label class="row">
+      <span data-i18n>Drugi koniec kabla</span>
+      <select id="serial-mode">
+        <option value="terminal" data-i18n>Terminal w przeglądarce</option>
+        <option value="webserial" data-i18n>Prawdziwy port RS-232 (Web Serial)</option>
+        <option value="modem" data-i18n>Wirtualny modem AT → WebSocket</option>
+        <option value="peer" data-i18n>Druga karta przeglądarki (null-modem)</option>
+      </select>
+      <button id="btn-serial-connect" class="primary" data-i18n>Podłącz</button>
+      <button id="btn-serial-disconnect" data-i18n>Rozłącz</button>
+    </label>
+    <p class="hint" data-i18n>Wybierz, z czym port szeregowy ma faktycznie rozmawiać po
+      drugiej stronie kabla — poniżej pojawi się krótkie wyjaśnienie wybranej
+      opcji.</p>
+
+    <div id="serial-opt-terminal">
+      <p class="hint" data-i18n>Najprostsza opcja i dobra na start. To, co wpiszesz w polu
+        tekstowym niżej, trafia do Portfolio tak, jakby ktoś pisał po drugiej
+        stronie kabla; to, co Portfolio samo wyśle, pojawia się w oknie terminala.
+        Nie wymaga żadnego dodatkowego sprzętu.</p>
+    </div>
+
+    <div id="serial-opt-webserial" hidden>
+      <p class="hint" data-i18n-html>Łączy z prawdziwym portem szeregowym w Twoim komputerze —
+        np. przejściówką USB→RS-232 podłączoną do prawdziwego Portfolio albo
+        innego urządzenia. Przeglądarka zapyta, który port systemowy udostępnić.
+        Wymaga Chrome albo Edge oraz strony otwartej przez <code>https://</code>
+        lub <code>localhost</code>. Prędkość dobierana jest automatycznie z tego,
+        co akurat ma zaprogramowane Portfolio — jeśli druga strona kabla ma inną,
+        zmień ją w Portfolio przez <kbd>`</kbd>+<kbd>S</kbd> → <b>Serial port</b>.</p>
+    </div>
+
+    <div id="serial-opt-modem" hidden>
+      <label class="row">
+        <span data-i18n>Szablon połączenia</span>
+        <input type="text" id="serial-dial" class="term-input"
+               value="ws://localhost:8081/?host={host}&amp;port={port}">
+      </label>
+      <p class="hint" data-i18n-html>Udaje staroświecki modem: rozumie komendy w rodzaju
+        <code>ATZ</code> i <code>ATDT&nbsp;numer</code>, odpowiada
+        <code>OK</code>/<code>CONNECT</code> tak jak zrobiłby to prawdziwy modem —
+        tylko zamiast dzwonić linią telefoniczną, łączy się przez WebSocket. Numer,
+        który wybierzesz w Portfolio, wstawiany jest w miejsce <code>{host}</code>
+        i <code>{port}</code> w szablonie połączenia; adres zaczynający się od
+        <code>ws://</code> idzie wprost, bez szablonu. Trzy znaki <code>+</code>
+        wracają do trybu komend, <code>ATH</code> rozłącza.</p>
+      <p class="hint" data-i18n-html><b>Ten przekaźnik musisz uruchomić u siebie.</b> Przeglądarka
+        z zasady nie otwiera gniazd TCP, więc telnet zawsze potrzebuje pośrednika po
+        stronie, która to potrafi — i nie da się go dołożyć do samej strony. Gotowy
+        leży obok: <a href="tools/ws-tcp-proxy.mjs" download="">ws-tcp-proxy.mjs</a>,
+        jeden plik, bez zależności, potrzebny tylko
+        <a href="https://nodejs.org/" target="_blank" rel="noopener">Node.js</a>.
+        Pobierz go i uruchom <i>w terminalu</i>, nie w przeglądarce:</p>
+      <pre class="cmd">node ws-tcp-proxy.mjs --allow bbs.fozztexx.com:23</pre>
+      <p class="hint" data-i18n-html>Potem wróć tutaj, wybierz <b>Podłącz</b> i w Portfolio wpisz
+        <code>ATDT&nbsp;bbs.fozztexx.com:23</code>. Przekaźnik prowadzi rozmowę
+        telnetu za Portfolio, więc do terminala trafia sam tekst. Cele spoza
+        <code>--allow</code> są odrzucane — bez tej listy nic nie jest osiągalne,
+        bo proxy łączące się gdziekolwiek jest otwartą przekaźnią do Twojej sieci
+        lokalnej.</p>
+      <p class="hint" data-i18n-html>Adresy sprawdzone jako działające:
+        <code>bbs.fozztexx.com:23</code> (Level 29),
+        <code>bbs.retrocampus.com:23</code>, <code>vert.synchro.net:23</code>,
+        <code>bbs.hispamsx.org:23</code>, <code>telehack.com:23</code>. Przekaźnik
+        domyślnie wycina sekwencje ANSI, bo ACOM ich nie interpretuje i wypisałby
+        je dosłownie (<code>--ascii off</code> je zostawia). Ekran ma za to tylko
+        40 znaków szerokości, więc grafika z 80-kolumnowych boardów i tak się
+        łamie — <code>bbs.fozztexx.com</code> i <code>bbs.retrocampus.com</code>
+        witają się czystym tekstem i są pod Portfolio najznośniejsze.</p>
+    </div>
+
+    <div id="serial-opt-peer" hidden>
+      <label class="row">
+        <span data-i18n>Kanał</span>
+        <input type="text" id="serial-channel" value="portfoliator-serial" size="24">
+      </label>
+      <p class="hint" data-i18n>Spina dwie działające obok siebie kopie Portfoliator, tak
+        jakby dwa prawdziwe Portfolio połączono kablem null-modem. Otwórz
+        Portfoliator w drugiej karcie przeglądarki, włącz tam port szeregowy w tym
+        samym trybie i wpisz ten sam kanał — obie kopie odnajdą się nawzajem.</p>
+    </div>
+
+    <div class="row">
+      <span data-i18n>Opóźnienie nadawania</span>
+      <label class="unit"><input type="number" id="serial-delay-char" min="0" max="999" step="1" value="0"> <span data-i18n>ms/znak</span></label>
+      <label class="unit"><input type="number" id="serial-delay-line" min="0" max="999" step="1" value="0"> <span data-i18n>ms/linia</span></label>
+    </div>
+    <p class="hint" data-i18n-html>Dławi to, co emulator wypuszcza <b>na kabel</b> — odpowiednik
+      <i>Transmit delay</i> z Tera Term. Potrzebne wyłącznie wtedy, gdy po drugiej
+      stronie jest <b>prawdziwe Portfolio</b>: układ 82C50A trzyma jeden bajt, a
+      DIP-DOS odpytuje go programowo, więc strumień bez przerw gubi znaki, kiedy
+      system akurat dopisuje dane do pliku. Objaw jest charakterystyczny —
+      <b>losowo</b> brakujące znaki, za każdym razem w innym miejscu. Sprawdzone
+      ustawienie to <b>15 ms/znak i 15 ms/linia</b>; przy zerach dławienie jest
+      całkowicie wyłączone i nie powstaje żadna kolejka.</p>
+    <p class="hint" data-i18n-html>Dotyczy obu źródeł naraz: i tego, co wysyłasz stąd „na linię”,
+      i tego, co nadaje emulowane Portfolio przez <code>AUX</code>. Emulowanej
+      maszyny to nie zatrzymuje — ona skończy swoje <code>COPY</code> dużo wcześniej,
+      niż bajty zejdą z kolejki, więc licznik <b>w kolejce</b> obok jest jedyną
+      oznaką, że transfer jeszcze trwa. Rozłączenie kolejkę porzuca.</p>
+
+    <label class="row">
+      <span data-i18n>Limit ciszy na linii</span>
+      <select id="serial-timeout">
+        <option value="0" selected data-i18n>domyślny z BIOS-u (~4 s)</option>
+        <option value="2">~8 s</option>
+        <option value="7">~30 s</option>
+        <option value="14" data-i18n>~1 min</option>
+        <option value="42" data-i18n>~3 min</option>
+        <option value="255" data-i18n>~18 min</option>
+      </select>
+    </label>
+    <p class="hint" data-i18n-html>Kiedy przez chwilę nic nie płynie po kablu, DIP-DOS w końcu się
+      poddaje — pokazuje <code>Not ready error</code> i pyta
+      <code>Abort, Retry, Ignore?</code>. To ustawienie mówi, jak długo ma czekać,
+      zanim to zrobi. Podnieś je, jeśli przesyłasz coś ręcznie przez
+      <code>COPY CON AUX</code> i zwyczajnie nie nadążasz pisać. Wybrana wartość
+      zostaje też po Resecie — mimo że system Portfolio przy każdym starcie
+      próbuje wrócić do wartości domyślnej.</p>
+    <p class="hint" data-i18n-html>Na <b>prawdziwym</b> Portfolio ten przełącznik oczywiście nic
+      nie zmieni — to ustawienie trzeba tam wprowadzić bezpośrednio w systemie.
+      Służy do tego gotowy programik <a href="tools/auxwait.com" download="">AUXWAIT.COM</a>
+      (76 bajtów): <code>AUXWAIT&nbsp;14</code> wydłuża limit do około minuty, samo
+      <code>AUXWAIT</code> przywraca wartość domyślną. Wystarczy uruchomić go raz po
+      starcie — najwygodniej dopisując do <code>AUTOEXEC.BAT</code> — bo trzyma się
+      aż do kolejnego restartu. Możesz go najpierw wypróbować tutaj, w emulatorze.</p>
+
+    <p class="hint" id="serial-status" data-i18n>Rozłączony.</p>
+    <p class="hint"><span data-i18n>Linia:</span> <b id="serial-line">—</b> <span data-i18n>· odebrano</span>
+      <b id="serial-rx">0</b> <span data-i18n>B · wysłano</span> <b id="serial-tx">0</b> B<span id="serial-pending"></span></p>
+
+    <h3 data-i18n>Terminal</h3>
+    <p class="hint" data-i18n>Na żywo pokazuje wszystko, co Portfolio wysyła przez ten port —
+      niezależnie od wybranego trybu połączenia. Nawet gdy rozmawiasz z prawdziwym
+      sprzętem albo modemem, tutaj zobaczysz podgląd całej rozmowy.</p>
+    <pre class="term" id="serial-term"></pre>
+
+    <label class="row">
+      <span data-i18n>Wysyłaj</span>
+      <select id="serial-dir">
+        <option value="pofo" selected data-i18n>do emulowanego Portfolio</option>
+        <option value="line" data-i18n>na linię, do drugiego urządzenia</option>
+      </select>
+    </label>
+    <p class="hint" data-i18n>Dotyczy trzech rzeczy poniżej: pola tekstowego, „Wyślij plik”
+      i znaku końca pliku. Zostaw „do emulowanego Portfolio”, gdy to ta strona ma
+      udawać drugi koniec kabla — tak jest we wszystkich przykładach niżej.
+      Przełącz na „na linię” tylko wtedy, gdy po drugiej stronie jest coś innego,
+      do czego naprawdę chcesz coś wysłać — np. prawdziwe Portfolio podłączone
+      przez Web Serial.</p>
+
+    <div class="row">
+      <input type="text" id="serial-input" class="term-input"
+             placeholder="tekst do wysłania" data-i18n-placeholder>
+      <button id="btn-serial-send" data-i18n>Wyślij + CR</button>
+    </div>
+    <div class="row">
+      <button id="btn-serial-clear" data-i18n>Wyczyść</button>
+      <button id="btn-serial-capture" data-i18n>Zapisuj do pliku</button>
+      <label class="filebtn"><span data-i18n>Wyślij plik…</span><input type="file" id="serial-file"></label>
+      <button id="btn-serial-eof" data-i18n>Znak końca pliku (Ctrl+Z)</button>
+    </div>
+
+    <h3 data-i18n>Jak przenieść plik</h3>
+    <p class="hint" data-i18n-html><b>Z komputera do Portfolio:</b> w Portfolio wpisz
+      <code>COPY AUX PLIK.TXT</code>, żeby było gotowe na odbiór, tutaj kliknij
+      „Wyślij plik…”, a na koniec „Znak końca pliku”. Przy wysyłce <b>na linię</b>
+      otwiera się osobne okno z paskiem postępu i przyciskiem „Przerwij” — przy
+      włączonym opóźnieniu nadawania transfer trwa minuty, więc widać, ile jeszcze
+      zostało. Bez tego ostatniego kroku
+      Portfolio będzie czekało na więcej danych, aż w końcu się podda
+      i zgłosi <code>Not ready error</code> — system Portfolio nie ma innego sposobu,
+      żeby poznać koniec pliku przychodzącego z urządzenia.</p>
+    <p class="hint" data-i18n-html><b>Z Portfolio do komputera:</b> włącz „Zapisuj do pliku”, w
+      Portfolio wykonaj <code>COPY PLIK.TXT AUX</code>, a na koniec kliknij
+      „Zakończ zapis i pobierz”.</p>
+    <p class="hint" data-i18n-html><b>Między dwiema kartami przeglądarki:</b> wybierz tryb
+      null-modem po obu stronach, na odbierającej wpisz w Portfolio
+      <code>COPY AUX PLIK.TXT</code>, na wysyłającej <code>COPY PLIK.TXT AUX</code>,
+      a na koniec na <b>odbierającej</b> karcie kliknij „Znak końca pliku” — dokładnie
+      tak samo, jak w pierwszym przykładzie wyżej.</p>
+  </div>
+</dialog>
+
+
+<dialog id="dlg-keys" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Klawiatura</h2>
+
+  <p class="hint" data-i18n>Klawiatura Portfolio nie jest identyczna z klawiaturą PC — kilku
+    klawiszy po prostu na niej nie ma, a niektóre nazywają się inaczej. Emulator
+    odwzorowuje układ tak wiernie, jak się da, więc większość klawiszy robi to,
+    czego można się spodziewać po ich położeniu, ale te kilka różnic warto znać:</p>
+
+  <table class="keys">
+    <tr><th data-i18n>Klawisz Portfolio</th><th data-i18n>Klawisz PC</th></tr>
+    <tr><td data-i18n>Atari</td><td data-i18n-html><kbd>`</kbd> (tylda, na lewo od <kbd>1</kbd>)</td></tr>
+    <tr><td data-i18n>Fn</td><td><kbd>F1</kbd></td></tr>
+    <tr><td data-i18n>Lock</td><td data-i18n-html><kbd>Caps&nbsp;Lock</kbd></td></tr>
+    <tr><td data-i18n>Del / Ins</td><td data-i18n-html><kbd>Delete</kbd> lub <kbd>Insert</kbd></td></tr>
+    <tr><td data-i18n>Pozostałe</td><td data-i18n>w tych samych miejscach co na PC</td></tr>
+  </table>
+
+  <p class="hint" data-i18n-html>Portfolio nie ma osobnej klawiatury numerycznej — cyfry
+    i podstawowe działania matematyczne są dostępne jako nakładka pod klawiszem
+    Atari, np. <kbd>`</kbd>+<kbd>M</kbd> daje <code>0</code>. Pełny układ tej
+    nakładki znajdziesz w oryginalnej instrukcji Portfolio.</p>
+
+  <p class="hint" data-i18n>Dla dociekliwych: to odwzorowanie działa na poziomie sprzętowym
+    — dokładnie tak, jak zrobiłby to prawdziwy Portfolio — a nie przez podmianę
+    napisów na klawiszach. Dlatego stare programy, które próbowałyby czytać
+    klawiaturę bezpośrednio, tak jak robi się to na PC, i tak nie zadziałają:
+    to inny sprzęt, mimo że efekt wygląda znajomo.</p>
+</dialog>
+
+
+<dialog id="dlg-apps" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Wbudowane aplikacje</h2>
+
+  <p class="hint" data-i18n-html>Klawisz z symbolem Atari działa jak <kbd>Ctrl</kbd> czy
+    <kbd>Alt</kbd> na PC — sam, naciśnięty w prompcie DOS-u, nic nie robi.
+    Trzeba go <b>przytrzymać</b> i dopiero wcisnąć literę, żeby otworzyć jedną
+    z sześciu wbudowanych aplikacji.</p>
+
+  <table class="keys">
+    <tr><th data-i18n>Skrót</th><th data-i18n>Aplikacja</th><th data-i18n>Co to jest</th></tr>
+    <tr><td><kbd>`</kbd>+<kbd>A</kbd></td><td data-i18n>Address Book</td>
+      <td data-i18n>Książka adresowa — kontakty i numery telefonów, z możliwością
+        wybierania numeru tonami wprost z Portfolio.</td></tr>
+    <tr><td><kbd>`</kbd>+<kbd>C</kbd></td><td data-i18n>Calculator</td>
+      <td data-i18n>Kalkulator z pamięcią i podglądem ostatnich działań.</td></tr>
+    <tr><td><kbd>`</kbd>+<kbd>D</kbd></td><td data-i18n>Diary</td>
+      <td data-i18n>Kalendarz i terminarz spotkań.</td></tr>
+    <tr><td><kbd>`</kbd>+<kbd>E</kbd></td><td data-i18n>Editor</td>
+      <td data-i18n-html>Prosty edytor tekstu, do zwykłych plików <code>.TXT</code>.</td></tr>
+    <tr><td><kbd>`</kbd>+<kbd>S</kbd></td><td data-i18n>Setup</td>
+      <td data-i18n>Ustawienia systemu: ekran, dźwięk, data i godzina, port szeregowy
+        i drukarka.</td></tr>
+    <tr><td><kbd>`</kbd>+<kbd>W</kbd></td><td data-i18n>Worksheet</td>
+      <td data-i18n>Arkusz kalkulacyjny zgodny z plikami Lotus 1-2-3 — da się nim otwierać
+        i zapisywać te same pliki, co na komputerze biurowym z tamtej epoki.</td></tr>
+  </table>
+
+  <p class="hint" data-i18n-html>To samo menu otwiera też polecenie <code>APP</code> wpisane
+    w prompcie. Same nazwy aplikacji nie są jednak poleceniami DOS-u — wpisanie
+    wprost <code>EDIT</code> zwróci <code>Bad command or program not found</code>,
+    trzeba skorzystać ze skrótu klawiszowego albo z <code>APP</code>.</p>
+
+  <p class="hint" data-i18n-html>Będąc już <b>wewnątrz</b> uruchomionej aplikacji, ten sam klawisz
+    Atari — tym razem naciśnięty i puszczony <em>sam</em>, bez żadnej litery —
+    otwiera pasek menu programu.</p>
+
+  <h3 data-i18n>Co Portfolio o sobie pamięta</h3>
+
+  <p class="hint" data-i18n-html>Wszystkie ustawienia wbudowanych aplikacji — łącznie z tym, co
+    wpisałeś w <b>Setupie</b> — leżą w jednym pliku na dysku <code>C:</code>:
+    <code>C:\SYSTEM\PERMDATA.DAT</code>, równo 730 bajtów, rozpisanych w
+    dokumentacji DIP-a co do bajta. Emulator czyta go wprost z pamięci maszyny.</p>
+
+  <div class="row">
+    <button id="btn-permdata" data-modal="dlg-permdata" data-i18n>Odczytaj ustawienia</button>
+  </div>
+</dialog>
+
+
+<dialog id="dlg-permdata" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Ustawienia zapamiętane przez Portfolio</h2>
+
+  <p class="hint" data-i18n-html>Odczytane z pliku <code>C:\SYSTEM\PERMDATA.DAT</code> —
+    730 bajtów na dysku <code>C:</code> emulowanej maszyny, w układzie rozpisanym
+    w dokumentacji DIP-a co do bajta. Zakładki odpowiadają sekcjom, na jakie
+    dzieli te ustawienia sam Portfolio.</p>
+
+  <p class="hint" data-i18n-html><b>Plik powstaje dopiero przy wyjściu z aplikacji</b> — dokładnie
+    wtedy, gdy wciśniesz <kbd>Esc</kbd> w menu najwyższego poziomu. Do tej chwili
+    zmiany żyją wyłącznie w pamięci, więc maszyna siedząca w Edytorze pokaże tu
+    jeszcze wartości z poprzedniego wyjścia, a maszyna, która ani razu nie była
+    w aplikacji, nie ma tego pliku w ogóle.</p>
+
+  <div class="tabs" role="tablist" id="permdata-tabs">
+    <button type="button" role="tab" data-group="serial" data-i18n>Port szeregowy</button>
+    <button type="button" role="tab" data-group="printer" data-i18n>Drukarka</button>
+    <button type="button" role="tab" data-group="editor" data-i18n>Edytor</button>
+    <button type="button" role="tab" data-group="worksheet" data-i18n>Arkusz</button>
+    <button type="button" role="tab" data-group="diary" data-i18n>Terminarz</button>
+    <button type="button" role="tab" data-group="address" data-i18n>Adresy</button>
+    <button type="button" role="tab" data-group="calculator" data-i18n>Kalkulator</button>
+    <button type="button" role="tab" data-group="system" data-i18n>Schowek</button>
+  </div>
+
+  <div role="tabpanel" id="permdata-panel">
+    <table class="keys" id="permdata-table"></table>
+  </div>
+
+  <div class="row">
+    <button id="btn-permdata-refresh" data-i18n>Odczytaj ponownie</button>
+  </div>
+
+  <p class="hint" id="permdata-status" data-i18n>Nie odczytano jeszcze niczego.</p>
+</dialog>
+
+
+<dialog id="dlg-serial-send" class="modal">
+  <h2 data-i18n>Wysyłanie pliku na linię</h2>
+
+  <p class="hint"><span data-i18n>Plik:</span> <b id="send-name">—</b></p>
+
+  <div class="bar"><div class="bar-fill" id="send-fill"></div></div>
+  <p class="hint"><b id="send-done">0</b> z <b id="send-total">0</b> B ·
+    <b id="send-pct">0%</b><span id="send-eta"></span></p>
+
+  <p class="hint" id="send-note" data-i18n>Bajty schodzą z kolejki w tempie ustawionym
+    w polu „Opóźnienie nadawania”. Przerwanie porzuca resztę — prawdziwe Portfolio
+    dostanie wtedy plik ucięty w tym miejscu.</p>
+
+  <div class="row">
+    <button id="btn-send-cancel" class="danger" data-i18n>Przerwij</button>
+  </div>
+</dialog>
+
+
+<dialog id="dlg-manual" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Instrukcja</h2>
+
+  <h3 data-i18n>Pierwsze uruchomienie</h3>
+  <ol>
+    <li data-i18n>Ekran copyright DIP-a → dowolny klawisz.</li>
+    <li data-i18n-html>Wybór układu klawiatury → <kbd>E</kbd> (English / QWERTY).</li>
+    <li data-i18n-html><code>New date (mm-dd-yy):</code> → data albo <kbd>Enter</kbd>.</li>
+    <li data-i18n-html><code>New time:</code> → godzina albo <kbd>Enter</kbd>.</li>
+    <li data-i18n-html>Prompt <code>c&gt;</code>.</li>
+  </ol>
+  <p class="hint" data-i18n-html>Przydatne polecenia: <code>APP</code>, <code>VER</code>,
+    <code>DIR</code>, <code>CLS</code>, <code>FORMAT A:</code>.</p>
+
+  <h3 data-i18n>Własne oprogramowanie na karcie</h3>
+  <ol>
+    <li data-i18n-html>Karta pamięci → wybierz rozmiar → <b>Utwórz i sformatuj</b>.</li>
+    <li data-i18n-html><b>Dodaj pliki…</b> — trafią do katalogu głównego karty.</li>
+    <li data-i18n-html><b>Reset</b> — DOS trzyma FAT w pamięci podręcznej i bez tego zobaczy
+      starą zawartość.</li>
+    <li data-i18n-html>W emulatorze: <code>A:</code> żeby przejść na kartę, albo
+      <code>COPY A:\*.* C:\</code>.</li>
+  </ol>
+  <p class="hint" data-i18n-html>Dysk <code>C:</code> to RAM-dysk w tej samej pamięci 128&nbsp;KB —
+    zostaje na nim około <b>31&nbsp;KB</b>. Większe programy uruchamiaj wprost
+    z karty.</p>
+
+  <h3 data-i18n>Gdzie zapisuje się stan</h3>
+
+  <p class="hint" data-i18n-html>Prawdziwe Portfolio trzymało wszystko w pamięci podtrzymywanej
+    bateryjnie. Tutaj tę rolę pełni <b>IndexedDB</b> — magazyn danych wbudowany
+    w przeglądarkę. <b>Nic nie trafia na serwer</b>: wszystko poniżej zostaje na
+    Twoim komputerze i znika razem z danymi tej witryny.</p>
+
+  <table class="keys">
+    <tr><th data-i18n>Co</th><th data-i18n>Kiedy jest zapisywane</th></tr>
+    <tr><td data-i18n-html>Pamięć NVRAM — dysk <code>C:</code> z plikami i ustawieniami DOS-u</td>
+      <td data-i18n>co 5 sekund oraz przy przełączeniu karty przeglądarki</td></tr>
+    <tr><td data-i18n-html>Obrazy kart w slotach <code>A:</code> i <code>B:</code></td>
+      <td data-i18n>przy każdej zmianie zawartości, także tej z poziomu DOS-u</td></tr>
+    <tr><td data-i18n>256&nbsp;KB pamięci rozszerzenia HPC-104</td>
+      <td data-i18n>jak wyżej</td></tr>
+    <tr><td data-i18n>Podłączony sprzęt (HPC-104, port równoległy, port szeregowy)</td>
+      <td data-i18n>przy zmianie ustawienia</td></tr>
+    <tr><td data-i18n>Pliki ROM</td>
+      <td data-i18n>raz, przy pierwszym wskazaniu</td></tr>
+    <tr><td data-i18n-html>Zrzuty stanu maszyny — trzy gniazda w oknie <b>Stan maszyny</b></td>
+      <td data-i18n>tylko wtedy, gdy sam je zapiszesz</td></tr>
+  </table>
+
+  <p class="hint" data-i18n-html>Ostatnia pozycja jest innego rodzaju niż reszta i warto to
+    rozróżnić. Pamięć NVRAM odpowiada temu, co w prawdziwym Portfolio trzymały baterie:
+    dysk <code>C:</code> przeżywa wyłączenie, ale maszyna po włączeniu startuje od nowa.
+    <b>Zrzut stanu</b> zamraża natomiast całą maszynę w połowie pracy — procesor, ekran,
+    pamięć, licznik czasu — i wczytanie stawia ją z powrotem dokładnie tam, bez rozruchu.
+    Zrzut da się też zapisać do pliku i przenieść na inny komputer.</p>
+
+  <p class="hint" data-i18n-html>Pierwsze cztery pozycje należą do <b>tej karty przeglądarki</b> —
+    druga otwarta karta dostaje własny, niezależny komplet, żeby dwa emulatory nie
+    nadpisywały sobie dysku <code>C:</code>. Pliki ROM są wspólne dla wszystkich,
+    bo to tożsamość maszyny, a nie jej stan.</p>
+
+  <p class="hint" data-i18n-html><b>Przeglądarka musi obsługiwać IndexedDB</b> — bez tego emulator
+    uruchomi się i będzie działał, ale po zamknięciu karty przepadnie wszystko:
+    dysk <code>C:</code>, karty i wskazane pliki ROM. W praktyce obsługują je
+    <b>wszystkie</b> przeglądarki zdolne w ogóle uruchomić ten emulator, bo
+    wymaga on rzeczy nowszych — modułów ES w Web Workerze. Realny próg to
+    <b>Chrome / Edge 80+</b> (i pochodne: Opera, Brave, Vivaldi),
+    <b>Safari 15+</b> (także na iOS) oraz <b>Firefox 114+</b>. IndexedDB samo
+    w sobie działa w nich od dawna i nie ono jest tu ograniczeniem.</p>
+
+  <p class="hint warn" data-i18n-html>Zapis potrafi jednak zniknąć niezależnie od obsługi —
+    warto o tym wiedzieć, zanim spędzisz godzinę nad plikiem na dysku
+    <code>C:</code>:</p>
+  <ul>
+    <li data-i18n-html><b>Tryb prywatny / incognito</b> — dane kasują się przy zamknięciu okna,
+      a bywa, że zapis nie działa wcale.</li>
+    <li data-i18n-html><b>Blokada danych witryn</b> w ustawieniach przeglądarki lub w rozszerzeniu
+      wyłącza IndexedDB razem z ciasteczkami.</li>
+    <li data-i18n-html><b>Czyszczenie historii i danych przeglądania</b> zabiera to razem z resztą.</li>
+    <li data-i18n-html><b>Safari</b> kasuje dane witryn, na które nie zaglądasz przez 7 dni — to
+      mechanizm ochrony prywatności (ITP), nie usterka.</li>
+    <li data-i18n-html><b>Brak miejsca na dysku</b> pozwala przeglądarce usunąć dane rzadziej
+      używanych stron. Emulator prosi o oznaczenie swoich danych jako trwałe, co
+      zwykle przed tym chroni, ale zgoda zależy od przeglądarki.</li>
+  </ul>
+
+  <p class="hint" data-i18n-html>Jedyna pewna kopia zapasowa to plik na Twoim dysku: w oknie
+    <b>Karta pamięci</b> jest przycisk <b>Pobierz obraz</b>, a pojedyncze pliki
+    da się pobrać z listy zawartości karty. Przed dłuższą przerwą warto z tego
+    skorzystać.</p>
+
+  <h3 data-i18n>Wybieranie numerów tonami (DTMF)</h3>
+  <p data-i18n-html>Address Book potrafi wybierać numer tonami — Portfolio przykładało się do
+    mikrofonu słuchawki. Numer musi być <b>w pierwszej linii karty, za nazwą</b>:</p>
+  <table class="keys">
+    <tr><th data-i18n>Zapis</th><th data-i18n>Znaczenie</th></tr>
+    <tr><td><code>,</code> <code>;</code></td><td data-i18n>rozdziela kilka numerów</td></tr>
+    <tr><td><code>( )</code></td><td data-i18n-html>kod kierunkowy, np. <code>(0483)</code></td></tr>
+    <tr><td><code>[ ]</code></td><td data-i18n>komentarz, nie jest wybierany</td></tr>
+    <tr><td data-i18n-html><code>-</code> spacja <code>.</code></td><td data-i18n>pauza</td></tr>
+    <tr><td><code>/</code></td><td data-i18n-html>wariant końcówki: <code>301555/6</code></td></tr>
+  </table>
+  <p class="hint" data-i18n-html>Przykład: <code>Kowalski 5551234</code>, potem Atari →
+    <code>Dial…</code> → wybór numeru.</p>
+
+  <h3 data-i18n>Port szeregowy krok po kroku</h3>
+  <ol>
+    <li data-i18n-html><b>Port szeregowy</b> → zaznacz <b>Podłącz interfejs szeregowy</b>
+      (odłączy to port równoległy — złącze przyjmuje jedno urządzenie).</li>
+    <li data-i18n-html><b>Reset</b>.</li>
+    <li data-i18n-html>Wybierz drugi koniec kabla i kliknij <b>Podłącz</b>.</li>
+    <li data-i18n-html>W Portfolio linia to urządzenie <code>AUX</code>:
+      <code>ECHO&nbsp;test&nbsp;&gt;&nbsp;AUX</code>,
+      <code>DIR&nbsp;&gt;&nbsp;AUX</code>, <code>COPY&nbsp;AUX&nbsp;PLIK.TXT</code>.</li>
+  </ol>
+  <p class="hint" data-i18n-html>Prędkość ustawia ROM: po starcie 2400 8N1. Zmienia się ją w
+    <kbd>`</kbd>+<kbd>S</kbd> → <b>RS-232 port</b>, i dopiero pozycja
+    <b>Initialize!</b> przenosi ustawienie do układu — sprawdzone: wybór 4800
+    zmienia dzielnik dopiero po niej.</p>
+  <p class="hint" data-i18n-html>Terminala w ROM-ie <b>nie ma</b>, więc wirtualny modem przyda się
+    dopiero z zewnętrznym programem terminalowym wgranym na kartę.
+    <code>CTTY&nbsp;AUX</code> też nie zadziała — DIP-DOS 2.11 nie zna tego
+    polecenia (odpowiada <code>Bad command or program not found</code>).</p>
+
+  <h3 data-i18n>Czego nie ma</h3>
+  <ul>
+    <li data-i18n-html><b>8087</b> — instrukcje ESC są dekodowane i pomijane; Portfolio i tak nie
+      miało koprocesora.</li>
+    <li data-i18n-html><b>Portfolio 2</b> (<code>pofo2</code>, F82C425, 640×200).</li>
+    <li data-i18n-html><b>Drugie źródło wybudzenia.</b> Wracając po poleceniu <code>OFF</code>, ROM
+      pyta ASIC, co go obudziło, i rozpoznaje dwa źródła. Modelujemy klawiaturę;
+      czym jest to drugie — nie wiadomo, i nic w emulatorze go nie wystawia.</li>
+  </ul>
+
+  <h3 data-i18n>Źródła i autorzy</h3>
+  <p data-i18n>Emulator jest napisany w JavaScripcie i stoi na cudzej pracy: model sprzętu
+    odtworzono na podstawie MAME i dokumentacji, a rdzeń procesora przeniesiono
+    z MartyPC. Należą się za nią podziękowania:</p>
+
+  <table class="keys credits">
+    <tr><th data-i18n>Źródło</th><th data-i18n>Co z niego pochodzi</th><th data-i18n>Autorzy / licencja</th></tr>
+    <tr>
+      <td data-i18n-html><code>mame/src/mame/atari/pofo.cpp</code></td>
+      <td data-i18n-html>mapa pamięci, mapa I/O, kontroler przerwań ASIC, selektor magistrali
+        ROM_B, rejestr baterii, port wykrywania <code>0061h</code></td>
+      <td><span data-i18n>Curt Coder —</span> <button class="linklike" data-modal="dlg-license" data-i18n>BSD-3-Clause</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><code>mame/src/devices/video/hd61830.cpp</code></td>
+      <td data-i18n>model kontrolera LCD i algorytm rysowania trybu tekstowego oraz
+        graficznego</td>
+      <td><span data-i18n>Curt Coder —</span> <button class="linklike" data-modal="dlg-license" data-i18n>BSD-3-Clause</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><code>mame/src/mame/atari/pofo_kbd.cpp</code></td>
+      <td data-i18n>matryca klawiatury 8×8 i schemat kodów fizycznych
+        (wiersz&nbsp;×&nbsp;8&nbsp;+&nbsp;kolumna, bit&nbsp;7 = zwolnienie)</td>
+      <td><span data-i18n>Curt Coder, Jaen Saul —</span> <button class="linklike" data-modal="dlg-license" data-i18n>BSD-3-Clause</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><code>mame/src/devices/sound/pcd3311.cpp</code></td>
+      <td data-i18n>tablice tonów DTMF, modemowych i muzycznych oraz zachowanie linii
+        STROBE</td>
+      <td><span data-i18n>Curt Coder —</span> <button class="linklike" data-modal="dlg-license" data-i18n>BSD-3-Clause</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><code>mame/src/devices/bus/pofo/</code><br>
+        <code>ccm.cpp</code>, <code>exp.cpp</code>, <code>hpc101.cpp</code>,
+        <code>hpc102.cpp</code>, <code>hpc104.cpp</code></td>
+      <td data-i18n-html>slot karty pamięci, protokół portu rozszerzeń (BCOM, PDET, ~NMD1, PID),
+        interfejs równoległy 82C55A i szeregowy 82C50A wraz z rejestrem wektora
+        przerwania, oraz rozszerzenie HPC-104: mapowanie 256&nbsp;KB RAM-u,
+        bramka NCC1 pod <code>807Ch</code> i przelotka na kolejne urządzenie</td>
+      <td><span data-i18n>Curt Coder —</span> <button class="linklike" data-modal="dlg-license" data-i18n>BSD-3-Clause</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><code>mame/src/devices/machine/ins8250.cpp</code></td>
+      <td data-i18n>układ rejestrów UART-u 8250, priorytety przerwań oraz semantyka
+        IIR / LSR / MSR</td>
+      <td><span data-i18n>smf, Carl —</span> <button class="linklike" data-modal="dlg-license" data-i18n>BSD-3-Clause</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><a href="https://github.com/dbalsom/martypc" target="_blank"
+        rel="noopener">MartyPC</a><br>
+        <code>crates/lib/marty_core/src/cpu_808x/</code></td>
+      <td data-i18n-html>rdzeń procesora 8088 liczony co do taktu, przeniesiony funkcja po
+        funkcji (<code>js/emu/cpu8088.js</code>), oraz tablica dekodera rozkazów wygenerowana
+        z jego <code>decode.rs</code></td>
+      <td><span data-i18n>Daniel Balsom —</span> <button class="linklike" data-modal="dlg-license" data-i18n>MIT</button></td>
+    </tr>
+    <tr>
+      <td data-i18n-html><a href="https://github.com/SingleStepTests/8088" target="_blank"
+        rel="noopener">SingleStepTests 8088</a></td>
+      <td data-i18n>trzy miliony rozkazów nagranych na prawdziwym 8088, takt po takcie —
+        wzorzec, wobec którego sprawdzono rdzeń procesora; same dane nie są częścią projektu</td>
+      <td data-i18n>projekt SingleStepTests — MIT</td>
+    </tr>
+    <tr>
+      <td data-i18n-html><em>Atari Portfolio Technical Reference Guide</em>, wyd.&nbsp;1,
+        wrzesień&nbsp;1989</td>
+      <td data-i18n>opis systemu, kart pamięci, portu rozszerzeń, przydział bajtów PID</td>
+      <td data-i18n>Distributed Information Processing (DIP) Ltd. / Atari Corp.</td>
+    </tr>
+    <tr>
+      <td data-i18n-html><a href="https://github.com/codaris/PofoManager" target="_blank"
+        rel="noopener">PofoManager</a><br>
+        <code>Documentation/protocol.md</code>, <code>Arduino/Portfolio.ino</code></td>
+      <td data-i18n>opis protokołu transferu plików przez port równoległy — ramkowanie
+        bloków, sumy kontrolne, kody komend i wymagane opóźnienia</td>
+      <td data-i18n>Apache-2.0. Protokół opisał pierwotnie Klaus Peichl (2006) na PofoWiki;
+        implementacja tutaj jest własna</td>
+    </tr>
+    <tr>
+      <td data-i18n-html><a href="https://www.gust.org.pl/projects/e-foundry/tex-gyre/schola"
+        target="_blank" rel="noopener">TeX Gyre Schola</a> (Italic)<br>
+        <code>fonts/century-schoolbook-italic.*</code></td>
+      <td data-i18n>krój nagłówka, dobrany pod logo z obudowy — wolny klon Century
+        Schoolbook (Morris Fuller Benton, 1919)</td>
+      <td data-i18n-html>GUST e-foundry. GUST Font Licence — prawnie tożsama z LaTeX Project
+        Public License 1.3c, pełny tekst w
+        <code>fonts/GUST-FONT-LICENSE.txt</code></td>
+    </tr>
+  </table>
+
+  <p class="hint"><span data-i18n>Projekt MAME:</span> <a href="https://www.mamedev.org/" target="_blank"
+    rel="noopener" data-i18n>mamedev.org</a><span data-i18n>. Kod MAME jest tu</span> <b data-i18n>reimplementowany</b><span data-i18n>, a nie
+    kopiowany — ale algorytmy, tablice stałych i układy rejestrów pochodzą
+    z powyższych plików, więc licencja obowiązuje.</span>
+    <button class="linklike" data-modal="dlg-license" data-i18n>Pełna treść licencji
+      i noty o prawach autorskich →</button></p>
+  <p class="hint" data-i18n>Rdzeń procesora jest natomiast przeniesieniem kodu MartyPC, więc jego
+    nota o prawach autorskich i licencja MIT jadą razem z nim — w nagłówku pliku rdzenia,
+    w pliku LICENSE i w oknie licencji.</p>
+
+  <p class="hint" data-i18n-html>Format FAT12 kart nie pochodzi z żadnego źródła zewnętrznego:
+    został zdjęty z obrazów, które wyprodukowało polecenie <code>FORMAT A:</code>
+    z oryginalnego ROM-u, i odtworzony bajt w bajt.</p>
+
+  <p class="hint"><b data-i18n>Pliki ROM oraz DIP-DOS są własnością Atari Corp. i DIP Ltd.
+    i nie wchodzą w skład tego projektu.</b> <span data-i18n>Trzeba dostarczyć własny zrzut —
+    emulator poprosi o niego przy pierwszym uruchomieniu i zapamięta go w pamięci
+    przeglądarki; pliki nie są nigdzie wysyłane. Alternatywnie można je położyć
+    w katalogu</span> <code><span data-i18n>rom/</span></code> <span data-i18n>na serwerze. Testowano wyłącznie z rewizją
+    DIP-DOS 2.11 / ROM v1.072; inne rewizje emulator uruchomi, ale bez gwarancji
+    działania — na własną odpowiedzialność.</span>
+    <button class="linklike" data-modal="dlg-rom-hashes" data-i18n>Sumy kontrolne testowanych
+      plików →</button></p>
+</dialog>
+
+
+<dialog id="dlg-state" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Stan maszyny</h2>
+
+  <p class="hint" data-i18n-html>Zrzut stanu zamraża <b>całą maszynę</b> w tej chwili, w której
+    jest: procesor w połowie programu, zawartość ekranu, pamięć, karta, licznik czasu, kolejka
+    klawiatury. Wczytanie stawia ją z powrotem dokładnie tam — bez rozruchu, bez czekania,
+    z tym samym obrazem na wyświetlaczu. To nie to samo, co pamięć podtrzymywana bateryjnie,
+    która zapisuje się sama: tamta przechowuje <b>dysk C:</b> i przeżywa wyłączenie, ale po
+    włączeniu Portfolio startuje od nowa.</p>
+
+  <p class="hint" data-i18n-html>Przydaje się wszędzie tam, gdzie liczy się powrót do tego samego
+    miejsca: przed czymś, co może się nie udać, w połowie długiego arkusza, albo żeby odłożyć
+    pracę na jutro. <em>Uwaga: stan zapisany z wpiętym rozszerzeniem pamięci albo z inną płytą
+    w porcie wraca razem z nią — wczytanie przestawia sprzęt tak, jak był w chwili zapisu.</em></p>
+
+  <div class="row state-row">
+    <span data-i18n>Gniazdo 1</span>
+    <b id="state-when-1" class="state-when" data-i18n>puste</b>
+    <button data-state-save="1" data-i18n>Zapisz</button>
+    <button data-state-load="1" data-i18n>Wczytaj</button>
+    <button data-state-drop="1" class="danger" data-i18n>Usuń</button>
+  </div>
+  <div class="row state-row">
+    <span data-i18n>Gniazdo 2</span>
+    <b id="state-when-2" class="state-when" data-i18n>puste</b>
+    <button data-state-save="2" data-i18n>Zapisz</button>
+    <button data-state-load="2" data-i18n>Wczytaj</button>
+    <button data-state-drop="2" class="danger" data-i18n>Usuń</button>
+  </div>
+  <div class="row state-row">
+    <span data-i18n>Gniazdo 3</span>
+    <b id="state-when-3" class="state-when" data-i18n>puste</b>
+    <button data-state-save="3" data-i18n>Zapisz</button>
+    <button data-state-load="3" data-i18n>Wczytaj</button>
+    <button data-state-drop="3" class="danger" data-i18n>Usuń</button>
+  </div>
+
+  <h3 data-i18n>Plik</h3>
+  <p class="hint" data-i18n>Gniazda żyją w pamięci przeglądarki i znikają razem z jej danymi.
+    Plik przenosi stan na inny komputer i nadaje się na kopię zapasową.</p>
+  <div class="row">
+    <button id="btn-state-download" data-i18n>Zapisz do pliku</button>
+    <label class="filebtn"><span data-i18n>Wczytaj z pliku…</span><input type="file" id="state-file" accept=".pofostate"></label>
+  </div>
+
+  <p id="state-msg" class="hint"></p>
+</dialog>
+
+<dialog id="dlg-inspect" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Inspektor</h2>
+
+  <p class="hint" data-i18n-html>Podgląd maszyny w czasie jej pracy: rejestry procesora,
+    kod pod <code>CS:IP</code>, dowolne okno pamięci i <b>dziennik dostępów do portów</b>.
+    Ten ostatni pokazuje przy każdym wpisie, ile <b>cykli</b> minęło od poprzedniego — a to
+    jest liczba, która rozstrzyga większość pytań o czasy układu LCD. Okno odświeża się
+    cztery razy na sekundę; maszyna chodzi dalej — chyba że ją zatrzymasz, bo maszynę da się
+    tu również <b>zatrzymać, przejść krokiem</b> i złapać w <b>pułapkę na adres albo na
+    port</b>.</p>
+
+  <h3 data-i18n>Bieg maszyny</h3>
+  <div class="row insp-row">
+    <button id="btn-insp-pause" data-i18n>Zatrzymaj</button>
+    <button id="btn-insp-step" data-i18n>Krok</button>
+    <span class="unit"><label for="insp-brk" data-i18n>Pułapki na adres</label>
+      <input id="insp-brk" size="20" placeholder="E000:1BA0 1553"></span>
+    <label class="check">
+      <input type="checkbox" id="opt-insp-brk-io">
+      <span data-i18n>Pułapka na port</span>
+    </label>
+    <select id="insp-brk-dir">
+      <option value="w" data-i18n>zapis</option>
+      <option value="r" data-i18n>odczyt</option>
+      <option value="rw" data-i18n>zapis i odczyt</option>
+    </select>
+    <span class="unit"><label for="insp-brk-lo" data-i18n>Od</label>
+      <input id="insp-brk-lo" value="8010" size="5"></span>
+    <span class="unit"><label for="insp-brk-hi" data-i18n>Do</label>
+      <input id="insp-brk-hi" value="8011" size="5"></span>
+  </div>
+  <p id="insp-state" class="insp-state" data-i18n>Maszyna chodzi.</p>
+  <p class="hint" data-i18n-html><b>Pułapka na adres</b> zatrzymuje maszynę <b>przed</b> wykonaniem
+    instrukcji spod tego adresu — rejestry pokazują więc to, co ta instrukcja dopiero zobaczy.
+    Adresów może być kilka, po przecinku albo po spacji; sam offset oznacza segment
+    <code>E000</code>, czyli ROM. <b>Pułapka na port</b> zatrzymuje maszynę dopiero po
+    instrukcji, która dotknęła portu — zatrzymywanie się w jej połowie wymagałoby cofania
+    procesora i nic tu nie jest tego warte — więc w oknie kodu stoi już <b>następna</b>
+    instrukcja, a powód zatrzymania mówi, o który port i o jaki bajt chodziło.
+    <b>Krok</b> wykonuje jedną instrukcję i odświeża wszystkie panele razem z ekranem;
+    maszyna zatrzymuje się przy tym sama, jeśli akurat chodziła. Zamknięcie okna
+    <b>zdejmuje pułapki i puszcza maszynę w bieg</b> — inaczej dałoby się ją zostawić
+    zatrzymaną bez niczego, czym można by ją ruszyć.</p>
+
+  <h3 data-i18n>Procesor</h3>
+  <pre id="insp-regs" class="insp"></pre>
+
+  <div class="insp-cols">
+    <section>
+      <h3 data-i18n>Kod</h3>
+      <div class="row insp-row">
+        <label class="check">
+          <input type="checkbox" id="opt-insp-follow" checked>
+          <span data-i18n>Idź za CS:IP</span>
+        </label>
+        <span class="unit"><label for="insp-code" data-i18n>Adres</label>
+          <input id="insp-code" value="E000:0000" size="9"></span>
+      </div>
+      <pre id="insp-disasm" class="insp"></pre>
+    </section>
+
+    <section>
+      <h3 data-i18n>Pamięć</h3>
+      <div class="row insp-row">
+        <span class="unit"><label for="insp-mem" data-i18n>Adres</label>
+          <input id="insp-mem" value="0040:0000" size="9"></span>
+      </div>
+      <pre id="insp-dump" class="insp"></pre>
+    </section>
+  </div>
+
+  <h3 data-i18n>Dziennik portów</h3>
+  <div class="row insp-row">
+    <label class="check">
+      <input type="checkbox" id="opt-insp-io">
+      <span data-i18n>Śledź dostępy do portów</span>
+    </label>
+    <span class="unit"><label for="insp-lo" data-i18n>Od</label>
+      <input id="insp-lo" value="8000" size="5"></span>
+    <span class="unit"><label for="insp-hi" data-i18n>Do</label>
+      <input id="insp-hi" value="80FF" size="5"></span>
+    <button id="btn-insp-clear" data-i18n>Wyczyść</button>
+  </div>
+  <pre id="insp-log" class="insp insp-log"></pre>
+</dialog>
+
+<dialog id="dlg-license" class="modal">
+  <form method="dialog" class="modal-close"><button aria-label="Zamknij" data-i18n-aria>×</button></form>
+  <h2 data-i18n>Licencje i noty o prawach autorskich</h2>
+
+  <h3 data-i18n>MAME — BSD-3-Clause</h3>
+
+  <p class="hint" data-i18n-html>Model sprzętu w tym emulatorze odtworzono na podstawie plików
+    źródłowych MAME oznaczonych <code>license:BSD-3-Clause</code>. Punkt 2 tej
+    licencji wymaga, aby dystrybucja w postaci wykonywalnej reprodukowała notę
+    o prawach autorskich, listę warunków i zrzeczenie się odpowiedzialności —
+    a aplikacja WWW wysyłająca kod do przeglądarki jest właśnie taką dystrybucją.
+    Poniżej pełna, dosłowna treść.</p>
+
+  <h3 data-i18n>Noty o prawach autorskich</h3>
+  <pre class="license">Copyright (c) Curt Coder
+    src/mame/atari/pofo.cpp
+    src/devices/video/hd61830.cpp, hd61830.h
+    src/devices/sound/pcd3311.cpp, pcd3311.h
+    src/devices/bus/pofo/ccm.cpp, exp.cpp, hpc101.cpp, hpc102.cpp, hpc104.cpp
+
+Copyright (c) Curt Coder, Jaen Saul
+    src/mame/atari/pofo_kbd.cpp
+
+Copyright (c) smf, Carl
+    src/devices/machine/ins8250.cpp, ins8250.h</pre>
+
+  <p class="hint" data-i18n-html>Nagłówki tych plików podają posiadaczy praw bez podania lat.
+    Projekt MAME jako całość podaje notę
+    <code>Copyright (c) 1997-2026 MAMEDev and contributors</code>.</p>
+
+  <h3 data-i18n>Warunki licencji i zrzeczenie się odpowiedzialności</h3>
+  <pre class="license">Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its contributors
+   may be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.</pre>
+
+  <h3 data-i18n>Znak towarowy</h3>
+  <p class="hint" data-i18n>MAME jest zastrzeżonym znakiem towarowym Gregory’ego Embera.
+    Nazwa użyta jest tu wyłącznie w celu wskazania pochodzenia odtworzonej pracy.
+    Ten projekt nie jest powiązany z projektem MAME ani przez niego firmowany.</p>
+
+  <p class="hint" data-i18n>Warunek 3 zakazuje używania nazwisk posiadaczy praw do promocji
+    prac pochodnych — w tym projekcie nazwiska pojawiają się wyłącznie w tej
+    licencji i w tabeli źródeł, jako wskazanie autorstwa.</p>
+
+  <h3 data-i18n>MartyPC — MIT</h3>
+  <p class="hint" data-i18n-html>Rdzeń procesora (<code>js/emu/cpu8088.js</code>) i tablica dekodera
+    rozkazów (<code>js/emu/cpu8088-decode.js</code>) to przeniesienie rdzenia 808x
+    z emulatora MartyPC, zrobione funkcja po funkcji. Licencja MIT wymaga, żeby nota
+    o prawach autorskich i treść licencji towarzyszyły każdej kopii — poniżej
+    dosłownie.</p>
+  <pre class="license">Copyright 2022-2026 Daniel Balsom
+    https://github.com/dbalsom/martypc
+    crates/lib/marty_core/src/cpu_808x
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</pre>
+
+  <h3 data-i18n>Inne licencje w tym projekcie</h3>
+  <p class="hint" data-i18n-html>Krój nagłówka (TeX Gyre Schola, GUST Font Licence) i dokumentacja
+    protokołu transferu plików (PofoManager, Apache-2.0) mają własne, odrębne
+    licencje — patrz tabela źródeł wyżej. Pełny tekst wszystkiego, łącznie z tą
+    licencją, jest też w pliku <code>LICENSE</code> w katalogu głównym projektu.</p>
+</dialog>
+
+<!-- Questions and notices: js/ui/confirm.js fills it in. Last in the page, as it
+     opens over the other dialogs. -->
+<dialog id="dlg-confirm" class="modal confirm">
+  <h2 id="confirm-title"></h2>
+  <p id="confirm-text"></p>
+  <div class="row confirm-actions">
+    <button type="button" id="confirm-cancel" data-i18n>Anuluj</button>
+    <button type="button" id="confirm-ok"></button>
+  </div>
+</dialog>
+
+</body>
+</html>

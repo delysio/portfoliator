@@ -1,0 +1,133 @@
+# Wzorce złotego przebiegu — zapisane przez tools/tests/golden.mjs.
+#
+# Ten plik jest po to, żeby dało się go przeczytać w git diff. Kiedy zmiana
+# w emulatorze przesunie cokolwiek na ekranie, widać tu dokładnie co — i można
+# zdecydować, czy tak miało być, zamiast przyklepywać nowy skrót w ciemno.
+#
+# Bajty spoza ASCII zapisane są wartością (~C9), powtórzenia zwinięte (~CD*26).
+# Czas na ekranie startowym jest zamaskowany, bo ma osobną kontrolę.
+#
+# Zapis od nowa:  ZAPISZ_WZORCE=1 node tools/tests/golden.mjs
+
+### rozruch/prawa-autorskie
+Copyright (c) 1989 DIP
+Distributed Information Processing Ltd
+Surrey Research Park, Guildford, England
+All rights reserved
+Tous droits r~82serv~82s
+Alle Rechte vorbehalten
+
+BIOS: 1.072    Operating system: 1.072
+
+### rozruch/klawiatura
+Keyboard - Clavier - Tastatur
+
+Type     "E"  for  English   (QWERTY)
+Taper    "F"  pour Fran~87ais  (AZERTY)
+Dr~81cken  "D"  f~81r  Deutsch   (QWERTZ)
+
+### rozruch/data
+Date: Tue  1-01-1980
+New date (mm-dd-yy):
+
+### rozruch/czas
+Date: Tue  1-01-1980
+New date (mm-dd-yy):
+Time:  G:MM:SS.hh
+New time:
+
+### rozruch/prompt
+New date (mm-dd-yy):
+Time:  G:MM:SS.hh
+New time:
+
+DIP Operating System 2.11  v1.072
+Copyright (c) DIP 1989
+
+c>
+
+### rozruch/instrukcji
+1007064
+
+### zegar/na-promptcie
+0:00:03.00
+
+### dos/wersja
+Copyright (c) DIP 1989
+
+c>ver
+
+DIP Operating System 2.11  v1.072
+Copyright (c) DIP 1989
+
+c>
+
+### dos/katalog
+
+Volume in drive c has no label
+Directory of c:\
+
+system       <DIR>      1-01-80   0:00a
+      1 File 31104 bytes free
+
+c>
+
+### aplikacja/adresy
+~C9 C:UNNAMED.ADR ~CD*17 #0 ~CD~CD~BB
+~BA                                      ~BA
+~BA~C4*38~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~C8 Tue 01 Jan 80 00:00 ~CD*12 INS ~BC
+
+### aplikacja/kalkulator
+~C9~CD*26 Gen M:1 #0 ~BB
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA~C4*38~BA
+~BA                                 0    ~BA
+~C8 Tue 01 Jan 80 00:00  NUM ~CD*7 INS ~BC
+
+### aplikacja/kalendarz
+~C9 C:DIARY.DRY ~CD*20 0 ~CD~CD~BB
+~BA1980  Sun Mon Tue Wed Thu Fri Sat     ~BA
+~BA      23  24  25  26  27  28  29      ~BA
+~BA      30  31   1   2   3   4   5      ~BA
+~BAJan:   6   7   8   9  10  11  12      ~BA
+~BA      13  14  15  16  17  18  19      ~BA
+~BA      20  21  22  23  24  25  26      ~BA
+~C8 Tue 01 Jan 80 00:00 ~CD*12 INS ~BC
+
+### aplikacja/edytor
+~C9 C:UNNAMED.TXT ~CD*7 L:1 C:1 M:37 ~CD~CD~BB
+~BA~11                                     ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~BA                                      ~BA
+~C8 Tue 01 Jan 80 00:00 ~CD*12 INS ~BC
+
+### aplikacja/setup
+~C9~CD~CD Setup 50146 ~CD*3~BB
+~BA Display...       ~BA
+~BA Sounds...        ~BA
+~BA Applications...  ~BA
+~BA Printer...       ~BA 2.11  v1.072
+~BA RS-232 port...   ~BA89
+~BA File transfer... ~BA
+~C8~CD*18~BC
+
+### aplikacja/arkusz
+~C9 C:UNNAMED.WKS ~CD*23~BB
+~BAA1:                                   ~BA
+~BA   ~DA~C4*4A~C4*3~C5~C4*4B~C4*3~C5~C4*4C~C4*3~C5~C4*4D~C4~C4~BA
+~BA1  ~B3                                  ~BA
+~BA2  ~B3                                  ~BA
+~BA3  ~B3                                  ~BA
+~BA4  ~B3                                  ~BA
+~C8 Tue 01 Jan 80 00:00 ~CD*12 INS ~BC

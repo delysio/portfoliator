@@ -1,0 +1,24 @@
+# Lokalna konfiguracja Claude Code — nie część projektu.
+/.claude/
+
+# Przykładowa/robocza zawartość, świadomie poza publicznym repo.
+/cards/
+/software/
+
+# Teksty zapowiedzi (posty na forum itp.) - robocze, edytowane lokalnie.
+/info/
+
+# Katalog roboczy na pliki testowe - cokolwiek tu wyląduje, zostaje lokalnie.
+/tmp/
+
+# Oryginalna dokumentacja techniczna - prawa autorskie DIP Ltd., nie nasza
+# do rozpowszechniania.
+/doc/
+
+# Znacznik roboczy: kopia grafiki 1x z zamalowanym prostokątem 240×64 pod (109, 63),
+# którym pokazywano położenie treści na szkle. Nie jest zasobem — kod go nie używa.
+/gfx/m.png
+
+# Obrazy EPROM i pliki, z których powstały (programy Portfolio innych autorów,
+# program konwertera z Atari ST) - wzorzec dla tools/tests/eprom.mjs, poza repo.
+/epr/
