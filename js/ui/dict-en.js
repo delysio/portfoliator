@@ -66,17 +66,22 @@ export const EN_DICT = {
     'The PCD3311T is a telephone tone generator with a filter built in — what leaves the pin is close to a sine, not a hard square wave. On top of that, a small transducer in a plastic case cuts away both the bottom and the top of the band. The first option models that whole chain and sounds like a real Portfolio; the second is the raw square, unfiltered — harsher and shriller, but identical to what MAME synthesises.',
   'Przeglądarka blokuje dźwięk do pierwszej interakcji — przestaw przełącznik.':
     'Browsers block audio until you interact with the page — flip the switch.',
-  'Przerwanie zegara systemowego <em>Wektor <code>08h</code>, ten sam co IRQ0 w PC. Prędkość <b>ustawia maszyna, nie Ty</b>: Portfolio ma dokładnie dwie — raz na sekundę albo raz na 128 sekund — i przełącza się między nimi funkcją <code>INT&nbsp;61h</code> <code>1Eh</code>, zapisem do portu <code>8040h</code>. BIOS przy każdym starcie wybiera tryb <b>wolny</b>, oszczędzający baterie; program, który poprosi o tik co sekundę, dostanie go co sekundę. Odznacz, jeśli chcesz przerwanie zegara wyciszyć zupełnie — wtedy nie nadejdzie <b>w ogóle</b>, bo poza tym nic w emulatorze go nie generuje.</em>':
-    'System clock tick <em>Vector <code>08h</code>, the same one IRQ0 uses on a PC. The rate is <b>the machine\'s choice, not yours</b>: the Portfolio has exactly two — once a second or once every 128 seconds — and switches between them through <code>INT&nbsp;61h</code> <code>1Eh</code>, by writing to port <code>8040h</code>. The BIOS picks the <b>slow</b>, battery-saving rate on every boot; a program that asks for a tick every second gets one every second. Clear the box to silence the tick entirely — then it never arrives <b>at all</b>, because nothing else in the emulator generates it.</em>',
-  'Zasypianie po bezczynności': 'Power down when idle',
-  'Nigdy — emulator czeka w nieskończoność': 'Never — the emulator waits forever',
-  'Jak prawdziwe Portfolio (128–256 s)': 'Like a real Portfolio (128–256 s)',
-  'Dłużej — ok. 4–9 min': 'Longer — about 4–9 min',
-  'Dużo dłużej — ok. 9–18 min': 'Much longer — about 9–18 min',
-  'Prawdziwe Portfolio samo odcina zasilanie, kiedy przez kilka minut nikt nie naciśnie klawisza — i <b>nie robi tego ROM, tylko układ ASIC</b>. BIOS, czekając na klawisz, wchodzi w stan czuwania zapisem do portu <code>8030h</code> i zatrzymuje procesor; odliczanie prowadzi sprzęt, licznikiem o ziarnistości 128&nbsp;sekund. Stąd zapis w dokumentacji DIP-a „zawsze między 128 a 256 sekund” — wychodzi jeden albo dwa pełne okresy, zależnie od tego, kiedy padło ostatnie stuknięcie. Na egzemplarzu autora zmierzono ok. 230&nbsp;s.':
-    'A real Portfolio cuts its own power when nobody presses a key for a few minutes — and <b>that is the ASIC doing it, not the ROM</b>. Waiting for a key, the BIOS enters standby by writing to port <code>8030h</code> and halts the processor; the countdown is run by the hardware, on a counter with 128-second granularity. Hence DIP\'s wording, "always between 128 and 256 seconds" — it comes out as one or two full periods, depending on where in the period the last keystroke fell. On the author\'s unit it measured about 230&nbsp;s.',
-  '<b>Ekran gaśnie, a maszyna staje</b> — dokładnie jak po odcięciu zasilania. <b>Budzi ją dowolny klawisz</b> i sesja toczy się dalej od tego samego miejsca, bez restartu. Domyślnie wyłączone, żeby emulator zostawiony w otwartej karcie nie gasł w trakcie czytania; włącz, jeśli chcesz zachowania zgodnego ze sprzętem. Polecenie <code>OFF</code> to osobna droga — gasi maszynę głębiej, ale klawisz budzi i z niej.':
-    '<b>The screen goes dark and the machine stops</b> — exactly as it would with the power cut. <b>Any key brings it back</b> and the session carries on from where it stood, with no restart. Off by default, so that an emulator left in an open tab does not go dark while you read; turn it on if you want the hardware\'s behaviour. The <code>OFF</code> command is a separate route — it powers the machine down further, but a key wakes it from that too.',
+  'Zegar Portfolio <em>Przerwanie <b>niemaskowalne</b> (NMI, wektor <code>02h</code>), a nie <code>08h</code> jak w PC: obsługa NMI w ROM-ie sama woła <code>INT&nbsp;08h</code>, a potem dzwoni alarmem, odlicza czas do samoczynnego wyłączenia i woła <code>INT&nbsp;1Ch</code>. Prędkość <b>ustawia maszyna, nie Ty</b>: raz na sekundę albo raz na 128 sekund, przełączane funkcją <code>INT&nbsp;61h</code> <code>1Eh</code>, zapisem do portu <code>8040h</code>. BIOS przy każdym starcie wybiera tryb <b>wolny</b>, oszczędzający baterie; program, który poprosi o tik co sekundę, dostanie go co sekundę. Odznacz, żeby zatrzymać zegar zupełnie — staną wtedy godzina Portfolio, alarmy i samoczynne wyłączanie.</em>':
+    'Portfolio clock <em>A <b>non-maskable</b> interrupt (NMI, vector <code>02h</code>), not <code>08h</code> as on a PC: the ROM\'s NMI handler calls <code>INT&nbsp;08h</code> itself, then rings a due alarm, counts down to the automatic power-off and calls <code>INT&nbsp;1Ch</code>. The rate is <b>the machine\'s choice, not yours</b>: once a second or once every 128 seconds, switched through <code>INT&nbsp;61h</code> <code>1Eh</code> by writing to port <code>8040h</code>. The BIOS picks the <b>slow</b>, battery-saving rate on every boot; a program that asks for a tick every second gets one every second. Clear the box to stop the clock altogether — the Portfolio\'s time, its alarms and the automatic power-off all stand still with it.</em>',
+  'Samoczynne wyłączanie':
+    'Automatic power-off',
+  'Nigdy — emulator czeka w nieskończoność':
+    'Never — the emulator waits forever',
+  'Jak prawdziwe Portfolio (128–256 s)':
+    'Like a real Portfolio (128–256 s)',
+  'Dłużej — ok. 6–9 min':
+    'Longer — about 6–9 min',
+  'Dużo dłużej — ok. 15–17 min':
+    'Much longer — about 15–17 min',
+  'Prawdziwe Portfolio samo się wyłącza, kiedy przez kilka minut nikt nie naciśnie klawisza, i robi to <b>BIOS, licząc takty zegara</b>: każde NMI bez klawisza zmniejsza licznik w pamięci, a gdy ten dojdzie do zera, maszyna przechodzi w tryb OFF. Licznik startuje od 2, a zegar w trybie wolnym tyka co 128&nbsp;sekund — stąd zapis w dokumentacji DIP-a „zawsze między 128 a 256 sekund”. Na egzemplarzu autora zmierzono ok. 230&nbsp;s. Dłuższe ustawienia emulator osiąga, dokładając BIOS-owi przed ostatnim taktem kolejną rundę; „Nigdy” nie pozwala licznikowi dojść do zera.':
+    'A real Portfolio switches itself off when nobody presses a key for a few minutes, and <b>the BIOS does it by counting clock ticks</b>: every NMI without a key takes one off a counter in memory, and when that reaches zero the machine goes into OFF mode. The counter starts at 2 and the slow clock ticks every 128&nbsp;seconds — hence DIP\'s wording, "always between 128 and 256 seconds". On the author\'s unit it measured about 230&nbsp;s. The longer settings are the emulator handing the BIOS another round just before the last tick; "Never" does not let the counter reach zero.',
+  '<b>Ekran gaśnie, a maszyna przechodzi w tryb OFF</b> — ten sam co po poleceniu <code>OFF</code>. <b>Budzi ją dowolny klawisz</b> i sesja toczy się dalej od tego samego miejsca. Zegar chodzi przy tym dalej: co 128 sekund BIOS budzi się na chwilę, przesuwa godzinę i sprawdza alarm, a gdy nadejdzie alarm z terminarza (Diary), maszyna włącza się sama i dzwoni. Program, który pracuje bez czekania na klawisz, nie pozwala maszynie się wyłączyć — tak samo jak na sprzęcie.':
+    '<b>The screen goes dark and the machine goes into OFF mode</b> — the same one the <code>OFF</code> command enters. <b>Any key brings it back</b> and the session carries on from where it stood. The clock keeps running meanwhile: every 128 seconds the BIOS wakes for a moment, moves the time on and looks at the alarm, and when a Diary alarm comes due the machine switches itself on and rings. A program that works without waiting for a key keeps the machine from switching off — just as on the hardware.',
 
   // ---- ROM files ----------------------------------------------------------
   'Pliki ROM': 'ROM files',
@@ -126,10 +131,10 @@ export const EN_DICT = {
   'Rozszerzenie HPC-104 (drugi slot, napęd B:)': 'HPC-104 expansion (second slot, drive B:)',
   'HPC-104 to oryginalne rozszerzenie, które dokładało Portfolio <b>drugi slot na kartę</b> — widoczny w systemie jako napęd <b>B:</b> — oraz <b>256&nbsp;KB dodatkowej pamięci</b>. Dzięki niemu można mieć dwie karty naraz i kopiować pliki prosto z jednej na drugą, poleceniem <code>COPY&nbsp;A:*.*&nbsp;B:</code>. Rozszerzenie ma przelotkę, więc drukarka albo port szeregowy nadal działają podłączone za nim.':
     'The HPC-104 is the original expansion that gave the Portfolio <b>a second card slot</b> — drive <b>B:</b> to the system — and <b>256&nbsp;KB of extra memory</b>. With it you can hold two cards at once and copy files straight from one to the other with <code>COPY&nbsp;A:*.*&nbsp;B:</code>. The expansion passes the bus through, so a printer or a serial port still works plugged in behind it.',
-  'Podłącz rozszerzenie HPC-104 <em>Daje drugi slot (napęd B:) oraz 256&nbsp;KB dodatkowej pamięci — ta druga działa niezależnie od karty, także przy pustym slocie. Obie rzeczy wymagają restartu, ale <b>innego</b>; szczegóły w ramce poniżej.</em>':
-    'Fit the HPC-104 expansion <em>Gives you a second slot (drive B:) and 256&nbsp;KB of extra memory — the memory works independently of the card, empty slot included. Both need a restart, but <b>different ones</b>; the details are in the box below.</em>',
-  '<b>Dwie rzeczy, dwa różne restarty.</b> Napęd <code>B:</code> pojawia się już po zwykłym <b>Resecie</b> — bez niego <code>DIR B:</code> pokaże tylko <code>Insert disk for drive B:</code>. Natomiast dodatkowe 256&nbsp;KB pamięci liczone jest wyłącznie przy <b>Zimnym starcie</b>: ciepły Reset zostawia starą wartość, więc <code>CHKDSK</code> dalej pokaże 126&nbsp;976&nbsp;B zamiast 389&nbsp;120&nbsp;B. Zimny start <b>kasuje zawartość dysku C:</b>, więc wcześniej zgraj z niego, co chcesz zachować. Karty w slotach A: i B: przetrwają go bez zmian.':
-    '<b>Two things, two different restarts.</b> Drive <code>B:</code> appears after an ordinary <b>Reset</b> — without one, <code>DIR B:</code> only says <code>Insert disk for drive B:</code>. The extra 256&nbsp;KB, on the other hand, is counted only on a <b>Cold start</b>: a warm Reset leaves the old figure, so <code>CHKDSK</code> goes on reporting 126&nbsp;976&nbsp;B instead of 389&nbsp;120&nbsp;B. A cold start <b>wipes drive C:</b>, so take off it whatever you want to keep first. Cards in slots A: and B: come through untouched.',
+  'Podłącz rozszerzenie HPC-104 <em>Daje drugi slot (napęd B:) oraz 256&nbsp;KB dodatkowej pamięci — ta druga działa niezależnie od karty, także przy pustym slocie. Obie rzeczy wymagają restartu, ale <b>innego</b>; szczegóły w dymku <b>!</b> przy nagłówku.</em>':
+    'Fit the HPC-104 expansion <em>Gives you a second slot (drive B:) and 256&nbsp;KB of extra memory — the memory works independently of the card, empty slot included. Both need a restart, but <b>different ones</b>; the details are in the <b>!</b> tooltip by the heading.</em>',
+  '<b>UWAGA!</b> Napęd <code>B:</code> pojawia się już po zwykłym <b>Resecie</b> — bez niego <code>DIR B:</code> pokaże tylko <code>Insert disk for drive B:</code>. Natomiast dodatkowe 256&nbsp;KB pamięci liczone jest wyłącznie przy <b>Zimnym starcie</b>: ciepły Reset zostawia starą wartość, więc <code>CHKDSK</code> dalej pokaże 126&nbsp;976&nbsp;B zamiast 389&nbsp;120&nbsp;B. Zimny start <b>kasuje zawartość dysku C:</b>, więc wcześniej zgraj z niego, co chcesz zachować. Karty w slotach A: i B: przetrwają go bez zmian.':
+    '<b>WARNING!</b> Drive <code>B:</code> appears after an ordinary <b>Reset</b> — without one, <code>DIR B:</code> only says <code>Insert disk for drive B:</code>. The extra 256&nbsp;KB, on the other hand, is counted only on a <b>Cold start</b>: a warm Reset leaves the old figure, so <code>CHKDSK</code> goes on reporting 126&nbsp;976&nbsp;B instead of 389&nbsp;120&nbsp;B. A cold start <b>wipes drive C:</b>, so take off it whatever you want to keep first. Cards in slots A: and B: come through untouched.',
   'Zimny start (przelicz pamięć)': 'Cold start (recount the memory)',
   'Reset (podłącz napęd B:)': 'Reset (attach drive B:)',
   'Nowa karta w slocie B:': 'New card in slot B:',
@@ -397,8 +402,6 @@ export const EN_DICT = {
     '<b>8087</b> — ESC instructions are decoded and skipped; the Portfolio had no coprocessor anyway.',
   '<b>Portfolio 2</b> (<code>pofo2</code>, F82C425, 640×200).':
     '<b>Portfolio 2</b> (<code>pofo2</code>, F82C425, 640×200).',
-  '<b>Drugie źródło wybudzenia.</b> Wracając po poleceniu <code>OFF</code>, ROM pyta ASIC, co go obudziło, i rozpoznaje dwa źródła. Modelujemy klawiaturę; czym jest to drugie — nie wiadomo, i nic w emulatorze go nie wystawia.':
-    '<b>The second wake-up source.</b> Coming back from the <code>OFF</code> command, the ROM asks the ASIC what woke it and recognises two sources. The keyboard is modelled; what the other one is nobody has established, and nothing in the emulator ever raises it.',
 
   // ---- manual: sources and credits ----------------------------------------
   'Źródła i autorzy': 'Sources and credits',
@@ -776,6 +779,8 @@ export const EN_DICT = {
     'Logging is off.',
   'Brak dostępów w tym zakresie.':
     'No accesses in that range.',
+  'Maszyna, która czeka na klawisz, <b>nie dotyka żadnego portu</b>: BIOS zatrzymuje procesor rozkazem <code>HLT</code> i budzi go dopiero przerwanie. Pusty dziennik przy znaku zachęty to więc prawda, a nie usterka. Żeby coś zobaczyć, <b>naciśnij klawisz</b> — przy otwartym Inspektorze klawisze nadal trafiają do Portfolio, chyba że kursor stoi w którymś z pól tekstowych; <code>Esc</code> zamyka okno. Tak samo działa każdy program, który akurat pracuje.':
+    'A machine waiting for a key <b>touches no port at all</b>: the BIOS stops the processor with <code>HLT</code> and only an interrupt wakes it. An empty log at the prompt is the truth, then, not a fault. To see something, <b>press a key</b> — with the Inspector open, keys still go to the Portfolio unless the cursor stands in one of its text fields; <code>Esc</code> closes the window. Any program that is busy working shows up the same way.',
   '… pominięto {0} wpisów':
     '… {0} entries dropped',
   'port / kierunek / bajt / cykli od poprzedniego':
@@ -922,8 +927,6 @@ export const EN_DICT = {
   'Plik {0} jest w obrazie urwany.': 'The file {0} is cut short in the image.',
   'Plik ma {0} B, a obraz EPROM to wielokrotność 128 KB.':
     'The file is {0} bytes, and an EPROM image is a multiple of 128 KB.',
-  'Obraz dla karty z&nbsp;EPROM-em, z&nbsp;kilkoma bankami po 128&nbsp;KB, przygotujesz na stronie <a href="eprom.html">Karta EPROM</a>; każdy bank wgrasz tu jak zwykłą kartę.':
-    'An image for an EPROM card, with several banks of 128&nbsp;KB, is prepared on the <a href="eprom.html">EPROM card</a> page; each bank loads here like an ordinary card.',
   // ---- questions and notices in the page's own dialog, table headers ------
   'Rozmiar': 'Size',
   'Stan': 'Status',
@@ -964,4 +967,44 @@ export const EN_DICT = {
     'The state saved {0} will be gone from the browser’s storage. This cannot be undone.',
   'brak wektora reset (JMP FAR) pod FFFF0h — pliki systemowe zamienione miejscami?':
     'no reset vector (JMP FAR) at FFFF0h — are the system files swapped?',
+
+  // Recording (dlg-record, js/ui/recorder.js).
+  'Nagrywanie': 'Recording',
+  'Nagranie zapisuje <b>obraz emulatora i jego dźwięk</b> do pliku wideo, prosto ze strony, bez dodatkowych programów. Obraz jest dokładnie taki jak na ekranie — z siatką punktów, kontrastem i bezwładnością matrycy — i ma jego rozdzielczość, bez przeskalowania. Kursor, przyciski strony i okna do nagrania nie trafiają.':
+    'A recording saves <b>the emulator’s picture and its sound</b> to a video file, straight from the page, with no extra software. The picture is exactly what the screen shows — with the dot grid, the contrast and the panel’s inertia — at its resolution, without rescaling. The cursor, the page’s buttons and its dialogs stay out of the recording.',
+  'Kadr': 'Framing',
+  'Ekran z obudową': 'Screen in the case',
+  'Sam ekran': 'Screen only',
+  '<b>Ekran z obudową</b> pokazuje Portfolio tak jak na stronie, w grafice obudowy. <b>Sam ekran</b> to samo szkło, razem z pustym pasem nad i pod obrazem — przydaje się, kiedy film idzie dalej do montażu. Rozmiar zależy od skali obrazu i od powiększenia systemowego: przy 4× i 100% obudowa ma 1628×716, a sam ekran 960×320 pikseli. Na czas nagrywania skala jest zablokowana.':
+    '<b>Screen in the case</b> shows the Portfolio as the page does, in the case artwork. <b>Screen only</b> is the glass alone, with the blank band above and below the picture — useful when the video goes on to be edited. The size depends on the zoom and on the system scaling: at 4× and 100% the case is 1628×716 and the screen alone 960×320 pixels. The zoom is locked while recording.',
+  '<b>Dźwięk</b> nagrywa się taki, jaki słychać: z ustawioną głośnością, a przy wyłączonym dźwięku (<b>System</b>) — cisza. Dźwięk można włączyć także w trakcie nagrywania.':
+    '<b>Sound</b> is recorded as you hear it: at the volume set, and as silence while sound is off (<b>System</b>). Sound can also be switched on during a recording.',
+  'Zacznij nagrywanie': 'Start recording',
+  'Po starcie okno się zamyka, a przycisk <b>Nagrywanie</b> na pasku zamienia się w licznik czasu — kliknięcie go kończy nagranie i pobiera plik. Chrome, Edge i Firefox zapisują <b>WebM</b>, Safari — <b>MP4</b>. Pliki WebM z przeglądarki nie mają spisu klatek, więc niektóre odtwarzacze nie pozwalają w nich przewijać; YouTube je przyjmuje, a przed montażem wystarczy przepakować plik bez kodowania od nowa: <code>ffmpeg -i nagranie.webm -c copy nagranie.mkv</code>.':
+    'Once started, the dialog closes and the <b>Recording</b> button on the toolbar turns into a timer — clicking it ends the recording and downloads the file. Chrome, Edge and Firefox save <b>WebM</b>, Safari <b>MP4</b>. WebM files from a browser carry no frame index, so some players cannot seek in them; YouTube accepts them, and before editing it is enough to repackage the file without re-encoding: <code>ffmpeg -i recording.webm -c copy recording.mkv</code>.',
+  'Zakończ nagrywanie ({0})': 'Stop recording ({0})',
+  'Nie udało się wczytać grafiki obudowy.': 'The case artwork could not be loaded.',
+  'Nagrywanie nie ruszyło: {0}': 'The recording did not start: {0}',
+  'Nagranie wyszło puste — przeglądarka nie oddała żadnych danych.':
+    'The recording came out empty — the browser handed over no data.',
+  'Ta przeglądarka nie potrafi nagrywać obrazu ze strony.': 'This browser cannot record the page’s picture.',
+
+  // Raw ROM card images (js/ui/cardimage.js).
+  'Karta {0} KB — rozszerzenie ROM ({1}), bez systemu plików': 'Card {0} KB — ROM extension ({1}), no file system',
+  'Obraz dopełniony': 'Image padded',
+  'Plik {0} ma {1} B, mniej niż karta. Reszta karty do {2} KB jest wypełniona bajtami FFh, tak jak niezapisane miejsce w EPROM-ie.':
+    'The file {0} is {1} bytes, less than a card. The rest of the card, up to {2} KB, is filled with FFh bytes, the way unprogrammed space reads in an EPROM.',
+
+  // Manual: recording a video.
+  'Nagrywanie filmu': 'Recording a video',
+  'W oknie <b>System</b> ustaw <b>Skalę obrazu</b> — od niej zależy rozdzielczość filmu (przy 4× obudowa ma 1628×716 pikseli). Jeśli film ma mieć dźwięk, włącz tam też <b>Dźwięk</b>.':
+    'In the <b>System</b> dialog, set the <b>Screen scale</b> — the video’s resolution follows it (at 4× the case is 1628×716 pixels). If the video is to have sound, switch on <b>Sound</b> there as well.',
+  '<b>Nagrywanie</b> → wybierz kadr: <b>Ekran z obudową</b> albo <b>Sam ekran</b> → <b>Zacznij nagrywanie</b>.':
+    '<b>Recording</b> → choose the framing: <b>Screen in the case</b> or <b>Screen only</b> → <b>Start recording</b>.',
+  'Okno się zamyka, a emulator działa dalej — pisz i uruchamiaj programy jak zwykle. Przycisk na pasku pokazuje czas nagrania.':
+    'The dialog closes and the emulator carries on — type and run programs as usual. The button on the toolbar shows the recording time.',
+  'Kliknij <b>Zakończ nagrywanie</b> — plik <code>portfolio-RRRR-MM-DD-GGMMSS.webm</code> (w Safari <code>.mp4</code>) trafi do pobranych.':
+    'Click <b>Stop recording</b> — the file <code>portfolio-YYYY-MM-DD-HHMMSS.webm</code> (<code>.mp4</code> in Safari) lands in your downloads.',
+  'Do filmu trafia sam emulator: bez kursora, przycisków i okien strony. Przeglądarka trzyma nagranie w pamięci aż do zakończenia, więc nie zamykaj karty w trakcie — strona zapyta, zanim pozwoli wyjść. Kilka minut to od kilkudziesięciu do kilkuset megabajtów, zależnie od tego, ile dzieje się na ekranie. Niektóre odtwarzacze nie przewijają plików WebM z przeglądarki; przed montażem przepakuj plik poleceniem <code>ffmpeg -i nagranie.webm -c copy nagranie.mkv</code>.':
+    'The video holds the emulator alone: no cursor, no buttons, none of the page’s dialogs. The browser keeps the recording in memory until it ends, so don’t close the tab halfway — the page asks before letting you leave. A few minutes come to anything from tens to hundreds of megabytes, depending on how much happens on screen. Some players cannot seek in WebM files from a browser; before editing, repackage the file with <code>ffmpeg -i recording.webm -c copy recording.mkv</code>.',
 };

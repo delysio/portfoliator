@@ -51,6 +51,7 @@ export class AudioOutput {
     this.filters = [];
     this.voices = [];
     this.clickBuffer = null;
+    this.tap = null;             // recording branch, see captureStream()
     this.lastClick = -1;
     this.audioClock = 0;
     this.volume = 0.25;
@@ -231,6 +232,23 @@ export class AudioOutput {
     } else {
       gain.gain.setTargetAtTime(0, when, RAMP);
     }
+  }
+
+  /**
+   * The output as a MediaStream, for a recording. Taken after the master gain,
+   * so the file carries what the speakers play: the volume and the mute switch
+   * apply to it as well. Needs a started context.
+   */
+  captureStream() {
+    if (!this.ctx) return null;
+    if (!this.tap) this.tap = this.ctx.createMediaStreamDestination();
+    this.master.connect(this.tap);
+    return this.tap.stream;
+  }
+
+  /** Takes the recording branch off the output again. */
+  releaseStream() {
+    if (this.tap) this.master.disconnect(this.tap);
   }
 
   /** Cuts everything off immediately, e.g. on reset. */

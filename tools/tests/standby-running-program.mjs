@@ -30,7 +30,11 @@ const check = (n, ok, d='') => { console.log(`${ok?'PASS':'FAIL'}  ${n}${d?'  �
   check('Nucleus rusza i zajmuje procesor', running);
   check('demo nie zostaje przerwane przez 300 s grania', at === null, at ? 'zabite po ' + at + ' s' : '');
   check('procesor ani razu nie stanął w trakcie demo', haltedSecs === 0, haltedSecs + ' s z HLT');
-  check('licznik czuwania stoi w trakcie demo', machine.standbyCrossed === 0, 'crossed=' + machine.standbyCrossed);
+  // Odliczanie prowadzi BIOS w 0040:014C, a przeładowuje je, dopóki od ostatniego
+  // postoju w pętli oczekiwania przyszedł klawisz (0040:0125 bit 7). Demo do tej
+  // pętli nie zagląda, więc licznik ma stać na pełnej wartości.
+  const zostalo = machine.ram[0x54C] | (machine.ram[0x54D] << 8);
+  check('odliczanie BIOS-u stoi w trakcie demo', zostalo === 2, 'zostało ' + zostalo);
 }
 
 // Ale bezczynny prompt nadal ma zasypiać.

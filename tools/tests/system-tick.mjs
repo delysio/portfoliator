@@ -9,6 +9,9 @@
 // Zestaw pilnuje trzech rzeczy: że BIOS przy starcie wybiera tryb wolny, że
 // Fn 1Eh faktycznie przełącza w obie strony i że tik przychodzi z częstotliwością,
 // którą maszyna sobie zamówiła — a nie z tą, którą wpisaliśmy na sztywno.
+//
+// Od 1.02 tik to NMI, a nie przerwanie maskowalne na wektorze 08h: obsługa NMI
+// w ROM-ie sama woła INT 08h. Liczone są więc impulsy NMI dane procesorowi.
 
 import { boot, run, bootToPrompt, callInterrupt, romsAvailable } from '../pofo-headless.mjs';
 
@@ -23,13 +26,13 @@ const check = (n, ok, d='') => { console.log(`${ok?'PASS':'FAIL'}  ${n}${d?'  �
 const GET = { ax: 0x1E00 };
 const setRate = (fast) => ({ ax: 0x1E01, bx: fast ? 1 : 0 });
 
-/** Liczy przerwania wektora 08h przez zadany czas maszynowy. */
+/** Liczy impulsy NMI zegara przez zadany czas maszynowy. */
 function countTicks(machine, cpu, ms) {
   let n = 0;
-  const raw = machine.triggerInterrupt.bind(machine);
-  machine.triggerInterrupt = (src) => { if (src === 0) n++; return raw(src); };
+  const raw = cpu.pulseNMI.bind(cpu);
+  cpu.pulseNMI = () => { n++; return raw(); };
   run(machine, cpu, ms);
-  machine.triggerInterrupt = raw;
+  cpu.pulseNMI = raw;
   return n;
 }
 

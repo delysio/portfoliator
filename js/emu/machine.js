@@ -25,7 +25,6 @@ const ROM_EXT = 0b010;
 const CCM_A   = 0b011;
 const CCM_B   = 0b111;
 
-// ASIC interrupt levels and the vectors they acknowledge with.
 // The card window in the CPU map is 128 KB and does not grow. A larger card is
 // made of 128 KB pages, selected by writing the page number to offset 000Ah of
 // the window - DIP's technical reference, section 2.3.5, which is also why it
@@ -48,18 +47,34 @@ const CCM_B   = 0b111;
 const CARD_WINDOW = 0x20000;
 const CARD_PAGE_REGISTER = 0x0A;
 
-const INT_TICK = 0, INT_KEYBOARD = 1, INT_ERROR = 2, INT_EXTERNAL = 3;
+// The maskable sources, as bits of the pending (8050h read) and enable (8050h
+// write) registers. The bit numbers are the ones the BIOS itself sets: 0Ah at the
+// prompt - keyboard and external - and 10h on top of that while it has a card
+// selected (E000:05E6). The clock tick is not among them, because it is not a
+// maskable interrupt at all: see raiseNmi().
+const INT_KEYBOARD = 1, INT_EXTERNAL = 3, INT_CARD = 4;
+const INTERRUPT_VECTOR = { [INT_KEYBOARD]: 0x09, [INT_CARD]: 0x15 };
+const INT_SOURCES = [INT_KEYBOARD, INT_EXTERNAL, INT_CARD];
 
-// Power-up source, as the BIOS reads it back at 0x8041 after a wake-up reset.
-// Only the keyboard is modelled; the other bit the ROM tests there leads to a
-// different handler, and nothing here knows yet what asserts it.
+// Why a reset pulse was a power-up, as the BIOS reads it back at 0x8041. Bit 0
+// is a key; bit 1 is the clock's NMI, which is how a machine in OFF mode keeps
+// its time and its alarms - see raiseNmi().
 const WAKE_KEYBOARD = 0x01;
+const WAKE_NMI = 0x02;
 
-// The slow clock tick, in seconds. DIP documents the pair as "once a second" and
-// "once every 128 seconds"; the second one is what the ROM picks at boot, because
-// the fast rate costs noticeably more battery.
-const SLOW_TICK_SECONDS = 128;
-const INTERRUPT_VECTOR = [0x08, 0x09, 0x00];
+// The clock chain. A 2 Hz tick drives an 8-bit counter that 8040h reads back as
+// "ticks since the last NMI", and the NMI comes either every second (two ticks)
+// or when the counter wraps, which is every 128 seconds - DIP's two rates. The
+// BIOS builds the time of day out of exactly that (E000:2B08): half-seconds kept
+// in RAM, which the NMI path advances by 2 or by 100h, plus the 8040h reading.
+const HALF_SECOND = CPU_CLOCK / 2;
+
+// The BIOS data the inactivity setting works on (segment 0040h): the countdown
+// the NMI handler decrements at E000:1D2F, and the flag byte whose bit 7 says a
+// key arrived since the wait loop last parked (E000:1553) and bit 2 that the
+// fast rate is on.
+const BIOS_COUNTDOWN = 0x400 + 0x14C;
+const BIOS_FLAGS = 0x400 + 0x125;
 
 const RAM_SIZE = 0x20000;
 const VRAM_OFFSET = RAM_SIZE - 0x1000;   // 0x1F000
@@ -69,11 +84,11 @@ const VRAM_OFFSET = RAM_SIZE - 0x1000;   // 0x1F000
 // `sysRom` is out because it is the same three images on both sides of a
 // restore; `bus` is out because it is a bundle of bound methods; the device
 // objects are out because they answer for themselves, one level down.
-const STATE = ['ip', 'ie', 'counter', 'romB', 'contrast',
+const STATE = ['ip', 'ie', 'tickCount', 'romB', 'contrast',
                'poweredOff', 'powerOffCause', 'powerUpLatch', 'batteryConfig',
-               'standbyPeriods', 'standbyArmed', 'standbyCrossed',
+               'nmiLatched', 'offService', 'standbyPeriods', 'standbyExtra',
                'systemTickEnabled', 'systemTickFast',
-               'cycleCount', 'cyclesToCounter', 'cyclesToTick'];
+               'cycleCount', 'cyclesToHalfSecond'];
 
 export class Machine {
   /**
@@ -92,10 +107,7 @@ export class Machine {
     const lcdCharRom = roms.lcdCharRom;
     this.lcd = new HD61830(roms.cgRom, (offset) =>
       lcdCharRom[(((offset & 0xFF) << 4) | ((offset >> 12) & 0x0F)) & (lcdCharRom.length - 1)]);
-    this.keyboard = new PofoKeyboard(() => {
-      this.standbyCrossed = 0;        // any key restarts the standby countdown
-      this.triggerInterrupt(INT_KEYBOARD);
-    });
+    this.keyboard = new PofoKeyboard(() => this.triggerInterrupt(INT_KEYBOARD));
     this.keyboard.setClock(CPU_CLOCK);
 
     // Tone changes are timestamped in CPU cycles so the host can schedule them
@@ -113,45 +125,59 @@ export class Machine {
 
     this.ip = 0;                // interrupt pending
     this.ie = 0;                // interrupt enable mask
-    this.counter = 0;           // 16-bit free-running counter at 2 Hz
+    this.tickCount = 0;         // 2 Hz ticks since the last NMI - what 8040h reads
     this.romB = ROM_APP;
     this.contrast = 0;
     this.poweredOff = false;
-    this.powerOffCause = null;    // 'standby' or 'off' - they wake differently
+    this.powerOffCause = null;    // only 'off' now; a snapshot may still say 'standby'
 
     // What the ASIC hands the BIOS after a wake-up reset pulse: zero when the
     // reset was not a power-up, otherwise the source bits the ROM reads back
     // at 0x8041. See masterReset() for what reads it and why.
     this.powerUpLatch = 0;
 
-    // Standby power-down is an ASIC function, not a ROM one. The BIOS wait loop
-    // at E000:143F enters standby with OUT 8030h,0 and halts; there is no
-    // countdown anywhere in the ROM, so the chip has to be what cuts power. Its
-    // timer has 128 s granularity and fires on the second boundary it crosses,
-    // which is exactly why DIP documents the timeout as always between 128 and
-    // 256 seconds - where in the period the last key fell decides which.
-    this.standbyPeriods = 0;      // boundaries to cross before sleeping; 0 = never
-    this.standbyArmed = false;    // the ROM has parked itself in the wait loop
-    this.standbyCrossed = 0;      // boundaries since the last key
+    // The NMI line stays up until the handler reads 8041h, which is what the
+    // ROM does as its first act (E000:1D0F). An NMI is taken on the rising edge,
+    // so a period that comes round before that read does not make a second one.
+    this.nmiLatched = false;
+
+    // OFF mode with the CPU running: the clock's NMI has pulsed MRST and the BIOS
+    // is updating the time and looking for an alarm, after which it nearly always
+    // switches itself straight back off. To whoever is looking at the machine it
+    // is still off - the display stays dark and the status does not flicker every
+    // 128 seconds. A contrast write ends it: that is the BIOS bringing the session
+    // back, as it does when an alarm is due (E000:20D6).
+    this.offService = false;
+
+    // Powering down after a few idle minutes is the BIOS's own doing: the NMI
+    // handler counts the countdown at 0040:014C down while no key arrives and,
+    // when it reaches zero, takes the path at E000:2008 to OFF mode. The ROM
+    // reloads it with 2 at the slow rate, so it fires on the second NMI after the
+    // last key - DIP's "always between 128 and 256 seconds".
+    //
+    // How many slow periods to allow is the one thing the user can change, and
+    // only by nudging that countdown just before the NMI would empty it: 2 is the
+    // machine left alone, 0 never lets it reach zero, 4 and 8 let it run round
+    // once or three times more. standbyExtra counts those extra rounds since the
+    // last key.
+    this.standbyPeriods = 0;
+    this.standbyExtra = 0;
 
     // Battery/boot configuration, matching MAME's BATTERY port.
     // bit 0: 1 = battery normal, bit 1: 1 = cold boot
     this.batteryConfig = 0x01;
 
     // DIP's technical reference (INT 61h Fn 1Eh) gives two tick rates: once a
-    // second, or once every 128 seconds - there is no 128 Hz mode. Which of the
-    // two is live used to be invisible from here, which is why the tick was off
-    // by default: ticking every second for a program that asked for the slow
-    // rate would have been 128 times too often. It is visible now - the ROM
-    // selects the rate by writing 0x8040, see out8 - so the tick runs by default
-    // at whatever the machine itself asked for.
+    // second, or once every 128 seconds. The ROM selects one by writing 8040h,
+    // see out8. Turning the clock off stops the whole 2 Hz chain - no NMI and no
+    // counting - which leaves the Portfolio's clock standing still rather than
+    // jumping back 128 seconds every time an unanswered counter wraps.
     this.systemTickEnabled = true;
     this.systemTickFast = false;   // the rate the ROM sets at boot is the slow one
 
     this.cpu = null;            // wired up by the caller
 
-    this.cyclesToCounter = CPU_CLOCK / 2;
-    this.cyclesToTick = this.tickPeriod();
+    this.cyclesToHalfSecond = HALF_SECOND;
 
     // Bound bus interface handed to the CPU.
     this.bus = {
@@ -219,7 +245,14 @@ export class Machine {
    * then restores.
    */
   restore(s) {
+    // Two of the fields are the user's settings rather than the machine's state:
+    // the page's current choice holds over whatever was set when the snapshot was
+    // taken. Up to 1.00 the clock box started cleared, so most snapshots say the
+    // clock is off - which, now that it is the NMI, would stop the time dead.
+    const settings = { standbyPeriods: this.standbyPeriods, systemTickEnabled: this.systemTickEnabled };
     put(this, s, STATE);
+    Object.assign(this, settings);
+    this.adoptOldClock(s);
     intoBytes(this.ram, s.ram);
     this.cardA = putCard(s.cardA);
     this.soundEvents.length = 0;
@@ -232,18 +265,33 @@ export class Machine {
     this.checkInterrupt();
   }
 
+  /**
+   * Snapshots from 1.00 carry the clock as it was modelled then: a
+   * 16-bit counter, a tick delivered as a maskable interrupt on bit 0 and a
+   * standby state of the emulator's own. The low byte of that counter is what
+   * 8040h read then and reads now, and a machine "in standby" was a CPU halted
+   * in the BIOS wait loop, which is simply a running machine waiting for a key.
+   */
+  adoptOldClock(s) {
+    if (!('tickCount' in s) && 'counter' in s) this.tickCount = s.counter & 0xFF;
+    if (!('cyclesToHalfSecond' in s) && 'cyclesToCounter' in s) this.cyclesToHalfSecond = s.cyclesToCounter;
+    if (this.powerOffCause === 'standby') { this.poweredOff = false; this.powerOffCause = null; }
+    this.ip &= INT_SOURCES.reduce((m, b) => m | (1 << b), 0);
+  }
+
   reset() {
     this.ip = 0;
     this.ie = 0;
-    this.counter = 0;
+    this.tickCount = 0;
+    this.cyclesToHalfSecond = HALF_SECOND;
     this.romB = ROM_APP;
     this.poweredOff = false;
     this.powerOffCause = null;
     this.powerUpLatch = 0;
+    this.nmiLatched = false;
+    this.offService = false;
+    this.standbyExtra = 0;
     this.systemTickFast = false;      // the BIOS re-selects it on every boot anyway
-    this.cyclesToTick = this.tickPeriod();
-    this.standbyArmed = false;
-    this.standbyCrossed = 0;
     this.lcd.reset();
     this.keyboard.reset();
     this.sound.reset();
@@ -346,15 +394,17 @@ export class Machine {
           break;
         case 4:
           if (port & 1) {
-            // High byte of the counter, plus the power-up source the ROM looks
-            // for here after a wake-up reset. Reading it consumes the latch, the
-            // way a status register normally behaves - the BIOS reads it exactly
-            // once, at E000:00F2, and every read after that is a plain counter
-            // read again.
-            data = (((this.counter >> 8) & 0xFF) | this.powerUpLatch) & 0xFF;
+            // Two bits: why the last reset pulse was a power-up - a key (bit 0)
+            // or the clock's NMI (bit 1). Reading it consumes them, and it is
+            // also the NMI acknowledge: the handler's first act is this read
+            // (E000:1D0F), and so is the reset path's (E000:00F2).
+            data = this.powerUpLatch & (WAKE_KEYBOARD | WAKE_NMI);
             this.powerUpLatch = 0;
+            this.nmiLatched = false;
           } else {
-            data = this.counter & 0xFF;
+            // 2 Hz ticks since the last NMI. The BIOS adds this to the time it
+            // keeps in RAM to get the time of day (E000:2B1C).
+            data = this.tickCount;
           }
           break;
         case 5:
@@ -401,33 +451,26 @@ export class Machine {
           this.sound.strobeW((val >> 6) & 1);
           break;
         case 3:
-          // Bit 1 is the OFF command. Every other write here is the BIOS wait
-          // loop announcing that it is about to halt, which is what arms the
-          // chip's standby timer.
+          // Bit 1 is OFF mode: the BIOS writes 02h on its way down, from the OFF
+          // command and from the inactivity countdown alike (E000:2087), and
+          // halts. A write without it is the wait loop at E000:1440 stopping the
+          // CPU clock until the next interrupt - standby - which to everything
+          // outside the chip is the HLT that follows.
           if (val & 0x02) this.powerDown('off');
-          else this.standbyArmed = true;
           break;
         case 4:
-          // Writing the low half selects the clock tick rate rather than loading
-          // the counter. That is what INT 61h Fn 1Eh does with it, and it is the
-          // only thing anything does with it: over a boot, a handful of DOS
-          // commands and twenty seconds of idling, the single write to this port
-          // is the 00h the BIOS sends from E000:0322 to choose the slow rate.
-          // Fn 1Eh then writes 01h for one tick a second and 00h for one every
-          // 128 seconds, which are the only two speeds the hardware has.
-          // KNOWN DIVERGENCE, found by TEMPO8 in August 2026. Here the rate
-          // change is free and leaves the 2 Hz counter alone; on hardware it is
-          // not. One block of that program read its data from the PSP by
-          // accident and so sent the port a stream of varying bytes instead of
-          // the zeros every other block sends - 435,752 flips of this bit inside
-          // its own fifteen-second window. On a real Portfolio the block came
-          // back with 038F where the identical block one address lower gave
-          // 06AF: the window it was timing itself against had collapsed to about
-          // half. Whatever this write does to the counter chain, it does not do
-          // it here, and nothing is known about it beyond that one reading.
-          // Nothing in a demo writes to this port, so it costs nothing to leave.
-          if (port & 1) this.counter = ((val << 8) | (this.counter & 0xFF)) & 0xFFFF;
-          else this.setTickRate((val & 1) !== 0);
+          // Writing 8040h selects the clock rate: 01h one NMI a second, 00h one
+          // every 128 seconds. INT 61h Fn 1Eh writes it, and the BIOS at boot and
+          // after a wake. The counter is left alone: the BIOS notes what 8040h
+          // read when it set the time (0040:014A) and counts from there.
+          // KNOWN DIVERGENCE, found by TEMPO8 in August 2026. One block of that
+          // program sent this port a stream of varying bytes - 435,752 flips of
+          // bit 0 inside its fifteen-second window - and on a real Portfolio the
+          // window it timed itself against collapsed to about half. Every flip
+          // to the fast rate with two or more ticks counted would fire an NMI
+          // and clear the counter here as well, but whether the hardware does
+          // more than that is unknown. Nothing in a demo writes to this port.
+          if (!(port & 1)) this.setTickRate((val & 1) !== 0);
           break;
         case 5:
           if (port & 1) this.romB = val & 0x0F;
@@ -435,6 +478,7 @@ export class Machine {
           break;
         case 6:
           this.contrast = val;
+          this.offService = false;    // the BIOS bringing the display back
           break;
         case 7:
           bcom = false;
@@ -480,7 +524,7 @@ export class Machine {
 
   intAck() {
     let vector = 0;
-    for (let i = 0; i < 4; i++) {
+    for (const i of INT_SOURCES) {
       if (this.ip & (1 << i)) {
         this.ip &= ~(1 << i);
         vector = (i === INT_EXTERNAL && this.expansion)
@@ -495,88 +539,110 @@ export class Machine {
 
   externalInterrupt() { this.triggerInterrupt(INT_EXTERNAL); }
 
-  /** Cycles between clock ticks, for whichever of the two rates is selected. */
-  tickPeriod() {
-    return this.systemTickFast ? CPU_CLOCK : CPU_CLOCK * SLOW_TICK_SECONDS;
+  /**
+   * Switches the clock rate. A switch to the fast rate with two or more ticks
+   * already counted is not left waiting for a counter wrap: the next tick finds
+   * the count at or past two and fires, see halfSecond().
+   */
+  setTickRate(fast) {
+    this.systemTickFast = fast;
+  }
+
+  /** One 2 Hz tick of the clock chain. */
+  halfSecond() {
+    this.tickCount = (this.tickCount + 1) & 0xFF;
+    const due = this.systemTickFast ? this.tickCount >= 2 : this.tickCount === 0;
+    if (!due) return;
+    this.tickCount = 0;
+    this.raiseNmi();
   }
 
   /**
-   * Switches the tick rate, restarting the countdown. Without the restart, going
-   * from the slow rate to the fast one would leave up to 128 seconds of the old
-   * period still to run before the first quick tick arrived.
+   * The clock's interrupt. On a Portfolio it is the NMI, not a vectored one: the
+   * ROM's handler at E000:1D06 acknowledges it by reading 8041h, calls INT 08h to
+   * advance the time and compare it with the alarm, and then does what INT 08h
+   * does not - rings a due alarm through INT 4Ah, counts the inactivity
+   * countdown down to OFF mode, and ends with INT 1Ch for programs. Raising INT
+   * 08h directly, as this emulator did up to 1.00, skipped all of that, and as
+   * the interrupt it was raised on was masked at the prompt, the clock itself
+   * mostly stood still too.
+   *
+   * In OFF mode the CPU has no power, so the NMI pulses MRST instead and says so
+   * in 8041h bit 1. The BIOS then runs the same time update from its reset path
+   * (E000:0100), and either goes straight back to OFF or, with an alarm due,
+   * brings the session back.
    */
-  setTickRate(fast) {
-    if (fast === this.systemTickFast) return;
-    this.systemTickFast = fast;
-    this.cyclesToTick = this.tickPeriod();
+  raiseNmi() {
+    if (this.nmiLatched) return;
+    this.nmiLatched = true;
+
+    if (this.poweredOff) {
+      if (this.powerOffCause !== 'off') return;
+      this.masterReset(WAKE_NMI);
+      this.offService = true;
+      return;
+    }
+
+    this.holdInactivity();
+    if (this.cpu) this.cpu.pulseNMI();
+  }
+
+  /**
+   * Applies the inactivity setting to the BIOS countdown, just before the NMI
+   * handler looks at it. Only the one NMI that would empty it is touched: with
+   * a key seen since the last park (flag bit 7) the ROM reloads the countdown
+   * itself, and anything above one is still on its way down.
+   */
+  holdInactivity() {
+    if (this.standbyPeriods === 2) return;
+    const flags = this.ram[BIOS_FLAGS];
+    if (flags & 0x80) { this.standbyExtra = 0; return; }
+    const left = this.ram[BIOS_COUNTDOWN] | (this.ram[BIOS_COUNTDOWN + 1] << 8);
+    if (left !== 1) return;
+    if (this.standbyPeriods !== 0) {
+      if (this.standbyExtra >= (this.standbyPeriods - 2) / 2) return;
+      this.standbyExtra++;
+    }
+    // One more round, at whatever length the ROM itself would reload.
+    const round = (flags & 0x04) ? 0x100 : 2;
+    this.ram[BIOS_COUNTDOWN] = (round + 1) & 0xFF;
+    this.ram[BIOS_COUNTDOWN + 1] = (round + 1) >> 8;
   }
 
   // ---- power --------------------------------------------------------------
 
-  /**
-   * One 128 s boundary of the standby timer went by.
-   *
-   * It only counts while the CPU is actually halted, because that is what
-   * standby *is* - the manual defines the mode by the stopped clock, and a
-   * machine busy running code is in RUN mode, where the timer has no business
-   * cutting power. Without this a demo that runs for minutes without asking for
-   * a key would be killed mid-frame, the arming write having been left over from
-   * the last visit to the BIOS wait loop.
-   *
-   * It also reproduces a quirk DIP documents: a program that polls the keyboard
-   * in a busy loop instead of waiting on INT 16h never lets the machine sleep.
-   */
-  standbyBoundary() {
-    if (!this.standbyPeriods || !this.standbyArmed || this.poweredOff) return;
-    if (!this.cpu || !this.cpu.halted) return;
-    if (++this.standbyCrossed >= this.standbyPeriods) this.powerDown('standby');
-  }
-
-  /** @param {'standby'|'off'} cause which of the two power modes was entered */
+  /** @param {'off'} cause the power mode entered - OFF is the only one the CPU cannot see out of */
   powerDown(cause) {
     this.poweredOff = true;
     this.powerOffCause = cause;
-    this.standbyArmed = false;
-    this.standbyCrossed = 0;
+    this.offService = false;
   }
 
   /**
-   * A key press brings the machine back - but the two power modes DIP describes
-   * in section 2.5.1 come back by different routes, and the difference is not
-   * cosmetic.
+   * A key press brings the machine back from OFF mode.
    *
-   * STANDBY MODE is the machine waiting for a key: everything stays powered and
-   * only the CCLK clock is halted. The ASIC restarts that clock; here the CPU
-   * was never stopped mid-instruction, so letting it run again is enough - it is
-   * sitting on the HLT inside the BIOS wait loop with its interrupts enabled,
-   * and the keyboard interrupt that follows takes it from there.
+   * OFF MODE, which the OFF command and the inactivity countdown both enter,
+   * powers only the custom chip and the RAM. The CPU has no power at all, so
+   * there is nothing to resume: waking is a pulse on MRST, which the guide
+   * describes as held high for over 300 ms when the system powers up. That is a
+   * hardware warm boot - section 3.2.2 spells out that it "also resets the ASIC
+   * and Processor which may be necessary if the interrupts have been disabled
+   * because the keyboard will not recognize user key presses", which is exactly
+   * the state OFF leaves behind: the ROM zeroes the interrupt-enable register,
+   * so no key could ever reach the CPU. RAM keeps its power throughout, so drive
+   * C: survives the trip, and the BIOS puts the session back where it was.
    *
-   * OFF MODE, which the OFF command enters, powers only the custom chip and the
-   * RAM. The CPU has no power at all, so there is nothing to resume: waking is a
-   * pulse on MRST, which the guide describes as held high for over 300 ms when
-   * the system powers up. That is a hardware warm boot - section 3.2.2 spells
-   * out that it "also resets the ASIC and Processor which may be necessary if
-   * the interrupts have been disabled because the keyboard will not recognize
-   * user key presses", which is exactly the state OFF leaves behind: the ROM
-   * zeroes the interrupt-enable register, so no key could ever reach the CPU.
-   * RAM keeps its power throughout, so drive C: survives the trip.
+   * Standby, the other mode DIP describes, is not one here: it is the CPU clock
+   * stopped in the BIOS wait loop until the next interrupt, and a halted CPU
+   * waiting for the keyboard interrupt is exactly that already.
    *
-   * @returns {null|'resume'|'off'} what the key did, so the caller can tell a
-   *   keystroke that was typed from one that only pressed the power button
+   * @returns {null|'off'} what the key did, so the caller can tell a keystroke
+   *   that was typed from one that only pressed the power button
    */
   wake() {
-    if (!this.poweredOff) return null;
-
-    if (this.powerOffCause === 'off') {
-      this.masterReset();
-      return 'off';
-    }
-
-    this.poweredOff = false;
-    this.powerOffCause = null;
-    this.standbyArmed = false;
-    this.standbyCrossed = 0;
-    return 'resume';
+    if (!this.poweredOff && !this.offService) return null;
+    this.masterReset(WAKE_KEYBOARD);
+    return 'off';
   }
 
   /**
@@ -589,40 +655,42 @@ export class Machine {
    *              was requested", and the ROM answers a reset it did not ask for
    *              by going back to OFF mode;
    *   E000:00F2  IN 8041 / AND AL,03 / JZ    - the wake source. Zero sends it
-   *              back to sleep as well; bit 0 is the one that leads to the path
-   *              which waits for the keyboard and then restores the session.
+   *              back to sleep as well; bit 0, a key, leads to the path which
+   *              waits for the key to be let go and then restores the session;
+   *              bit 1, the clock, to the one that updates the time and looks
+   *              for an alarm.
    *
    * Deliberately not a cold boot: RAM keeps its power all through OFF mode, so
    * the POST that would wipe drive C: must not run. The session comes back with
-   * its files - and its screen - intact.
+   * its files - and its screen - intact. Nor does the clock chain stop: it is
+   * what keeps the time while the machine is off, so the count and the rate go
+   * through the pulse untouched.
+   *
+   * @param {number} source WAKE_KEYBOARD or WAKE_NMI
    */
-  masterReset() {
+  masterReset(source = WAKE_KEYBOARD) {
+    const clock = { tickCount: this.tickCount, cyclesToHalfSecond: this.cyclesToHalfSecond,
+                    systemTickFast: this.systemTickFast };
     this.reset();
-    this.powerUpLatch = WAKE_KEYBOARD;
+    Object.assign(this, clock);
+    this.powerUpLatch = source;
     if (this.cpu) this.cpu.reset();
   }
 
   // ---- timing -------------------------------------------------------------
 
-  // Called after each batch of CPU cycles to advance the ASIC timers.
+  // Called after each batch of CPU cycles to advance the ASIC timers - in OFF
+  // mode too, because the clock chain is what keeps the time there.
   advance(cycles) {
     this.cycleCount += cycles;
     this.keyboard.advance(cycles);
     if (this.expansion && this.expansion.advance) this.expansion.advance(cycles);
 
-    this.cyclesToCounter -= cycles;
-    while (this.cyclesToCounter <= 0) {
-      this.cyclesToCounter += CPU_CLOCK / 2;      // 32768 / 16384 = 2 Hz
-      this.counter = (this.counter + 1) & 0xFFFF;
-      if ((this.counter & 0xFF) === 0) this.standbyBoundary();
-    }
-
-    if (this.systemTickEnabled) {
-      this.cyclesToTick -= cycles;
-      while (this.cyclesToTick <= 0) {
-        this.cyclesToTick += this.tickPeriod();
-        this.triggerInterrupt(INT_TICK);
-      }
+    if (!this.systemTickEnabled) return;
+    this.cyclesToHalfSecond -= cycles;
+    while (this.cyclesToHalfSecond <= 0) {
+      this.cyclesToHalfSecond += HALF_SECOND;     // 32768 / 16384 = 2 Hz
+      this.halfSecond();
     }
   }
 
@@ -632,7 +700,18 @@ export class Machine {
     this.cardA = { data, writable, dirty: false, page: 0 };
   }
 
-  ejectCardA() { this.cardA = null; }
+  /**
+   * Pulling the card out while the BIOS has it selected and the card interrupt
+   * enabled raises INT 15h, the card-access interrupt: the ROM's handler at
+   * E000:1CCC then ends whatever program was reading it. At any other moment -
+   * the window showing the application ROM, as it does at the prompt - the card
+   * simply goes.
+   */
+  ejectCardA() {
+    const selected = this.cardA && this.romB === CCM_A && (this.ie & (1 << INT_CARD));
+    this.cardA = null;
+    if (selected) this.triggerInterrupt(INT_CARD);
+  }
 }
 
 /**

@@ -285,9 +285,11 @@ function runSlice(ms) {
   while (budget > 0) {
     let chunk = 0;
 
-    if (cpu.halted && !cpu.intLine && !cpu.nmiEdge) {
+    if (machine.poweredOff || (cpu.halted && !cpu.intLine && !cpu.nmiEdge)) {
       // Nothing will change until a timer fires; skip ahead instead of
-      // burning the whole budget two cycles at a time.
+      // burning the whole budget two cycles at a time. In OFF mode the CPU has
+      // no power at all, but the clock chain still counts - it is what keeps
+      // the time and brings an alarm round.
       chunk = Math.min(budget, CHUNK_CYCLES);
       cpu.cycles += chunk;
     } else {
@@ -318,7 +320,7 @@ function runSlice(ms) {
 /** One frame to the host, whatever the machine is doing. */
 function postFrame() {
   if (!machine) return;
-  if (machine.poweredOff) frameBuf.fill(0);
+  if (machine.poweredOff || machine.offService) frameBuf.fill(0);
   else machine.lcd.render(frameBuf);
   post('frame', { pixels: frameBuf, contrast: machine.contrast });
 }
@@ -341,7 +343,7 @@ function tick() {
   }
 
   const sliceStartCycle = machine.cycleCount;
-  if (!machine.poweredOff) runSlice(dt);
+  runSlice(dt);
 
   // Hand tone changes to the host as offsets in seconds from the start of this
   // slice, so Web Audio can schedule them rather than fire them on arrival.
@@ -413,7 +415,7 @@ function postStatus() {
   post('status', {
     speed: cyclesThisSecond / CPU_CLOCK,
     printBytes: machine.expansion ? machine.expansion.peekLength() : 0,
-    poweredOff: machine.poweredOff,
+    poweredOff: machine.poweredOff || machine.offService,
     paused,
     cpu: cpu.state(),
     // The line settings the ROM programmed, so the host end can match them.
@@ -643,8 +645,8 @@ self.onmessage = (e) => {
       // A key that brings the machine back from the OFF command works the power
       // button rather than the keyboard: the ASIC answers it with a reset pulse
       // (see Machine.wake), and 300 ms of reset is no place to deliver a
-      // keystroke. Standby, where the machine really is waiting for a key, hands
-      // it through as normal.
+      // keystroke. A machine waiting for a key in the BIOS wait loop is running,
+      // and gets it as normal.
       if (machine.wake() === 'off') break;
       machine.keyboard.keyDown(msg.scancode);
       break;

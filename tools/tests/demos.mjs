@@ -121,7 +121,7 @@ zestaw('Nucleus', cardPath('nucleus.img'), 0, (machine, cpu) => {
   type(machine, cpu, 'N\n'); run(machine, cpu, 2000);
 }, [60, 120, 240], [
   [60, '1128f24b', 30],
-  [120, 'f0f39411', 30],
+  [120, '260d0f79', 30],    // 1.02: the clock NMI every 128 s takes its cycles - 66 pixels moved
   [240, 'cd04e7eb', 30],
 ]);
 

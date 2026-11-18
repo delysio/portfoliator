@@ -29,11 +29,14 @@ const check = (n, ok, d='') => { console.log(`${ok?'PASS':'FAIL'}  ${n}${d?'  �
   for (let s=1; s<=400; s++) { run(machine,cpu,1000); if (machine.poweredOff) { at = s; break; } }
   check('usypia w oknie 128-256 s', at !== null && at >= 128 && at <= 256, 'po ' + at + ' s');
 
+  // Od 1.02 wyłącza BIOS, odliczając NMI zegara, i robi to trybem OFF (E000:2087).
+  check('samoczynne wyłączenie to tryb OFF', machine.powerOffCause === 'off', String(machine.powerOffCause));
+
   // 3. Klawisz budzi i sesja trwa dalej.
   const woke = machine.wake();
   press(machine, cpu, 'Space');
   run(machine, cpu, 1500);
-  check('wake() zgłasza wybudzenie z czuwania', woke === 'resume');
+  check('wake() zgłasza wybudzenie impulsem MRST', woke === 'off');
   check('po wybudzeniu procesor znów pracuje', !cpu.halted || machine.poweredOff === false);
   type(machine, cpu, 'VER\n');
   run(machine, cpu, 2000);

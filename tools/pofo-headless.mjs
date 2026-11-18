@@ -56,8 +56,8 @@ export function run(machine, cpu, ms) {
 
   while (budget > 0) {
     let chunk = 0;
-    if (cpu.halted && !cpu.intLine && !cpu.nmiEdge) {
-      chunk = Math.min(budget, CHUNK);          // the worker's skip-ahead
+    if (machine.poweredOff || (cpu.halted && !cpu.intLine && !cpu.nmiEdge)) {
+      chunk = Math.min(budget, CHUNK);          // the worker's skip-ahead; in OFF mode only the clock runs
       cpu.cycles += chunk;
     } else {
       while (chunk < CHUNK && chunk < budget) chunk += cpu.step();

@@ -17,6 +17,8 @@ import { SerialHub } from './ui/serial.js';
 import { encode as encodeState, decode as decodeState, nazwaPliku } from './ui/statefile.js';
 import { confirmModal, noticeModal } from './ui/confirm.js';
 import { isoDate, isoDateTime, fileStamp, formatNumber } from './ui/format.js';
+import { padCardImage, romSignature } from './ui/cardimage.js';
+import { ScreenRecorder, FRAMES, recordingLayout, recordingSupported, formatElapsed } from './ui/recorder.js';
 
 const SCREEN_W = 240;
 const SCREEN_H = 64;
@@ -73,6 +75,9 @@ let pausedLabelUp = false;
 
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d', { alpha: false });
+
+// Fed from repaint(), so it sees every picture the panel shows and nothing else.
+const recorder = new ScreenRecorder(canvas);
 
 // The backing store is measured in device pixels, not emulated ones, and how
 // many of them a dot gets is what buildGrid() works out; until it has run there
@@ -189,6 +194,12 @@ const els = {
   grid: document.getElementById('opt-grid'),
   gridValue: document.getElementById('grid-value'),
   shell: document.getElementById('shell'),
+
+  record: document.getElementById('btn-record'),
+  recordDialog: document.getElementById('dlg-record'),
+  recordFrame: document.getElementById('opt-record-frame'),
+  recordStart: document.getElementById('btn-record-start'),
+  recordMsg: document.getElementById('record-msg'),
 };
 
 // Before anything is drawn: a reader who does not speak Polish should not have
@@ -663,6 +674,7 @@ function repaint() {
   paint(grid, lcdLevel, LCD_RAMP, pix32);
   ctx.putImageData(imageData, 0, 0);
   redrawPending = false;
+  if (recorder.active) recorder.frame();
 }
 
 function drawFrame(pixels) {
@@ -797,8 +809,22 @@ const HOST_KEYS = new Set(['F5', 'F11', 'F12']);
 
 // While a modal is open the keyboard belongs to the dialog, not the emulator -
 // otherwise Escape would be swallowed and typing would leak into DIP-DOS.
+//
+// The inspector is the exception. It is there to watch the machine work, and a
+// machine at the prompt does nothing at all - it sits on HLT in the BIOS wait loop
+// and touches no port - until a key arrives. So with the inspector open the keys
+// still go to the Portfolio, except Escape, which closes the window, and except
+// while the cursor stands in one of its text fields.
 function modalOpen() {
-  return document.querySelector('dialog[open]') !== null;
+  const open = document.querySelector('dialog[open]');
+  if (!open) return false;
+  if (open.id !== 'dlg-inspect') return true;
+  const el = document.activeElement;
+  return !!(el && el.matches('input:not([type=checkbox]):not([type=radio]), select, textarea'));
+}
+
+function keyForDialog(e) {
+  return modalOpen() || (e.key === 'Escape' && document.querySelector('dialog[open]') !== null);
 }
 
 // The browser's keyboard, with the modifiers reconciled from their flags - see
@@ -807,7 +833,7 @@ const hostKeys = new HostKeyboard((type, scancode) =>
   worker.postMessage({ type, scancode }));
 
 function onKeyDown(e) {
-  if (HOST_KEYS.has(e.key) || modalOpen()) return;
+  if (HOST_KEYS.has(e.key) || keyForDialog(e)) return;
 
   if (hostKeys.scancode(e) === undefined) return;
 
@@ -816,7 +842,7 @@ function onKeyDown(e) {
 }
 
 function onKeyUp(e) {
-  if (modalOpen()) return;
+  if (keyForDialog(e)) return;
 
   if (hostKeys.scancode(e) === undefined) return;
   e.preventDefault();
@@ -847,7 +873,7 @@ function saveSettings() {
     rise: els.rise.value,
     grid: Number(els.grid.value),
     standby: Number(els.standby.value),
-    systemTick: els.systemTick.checked,
+    clock: els.systemTick.checked,
     ramRandom: els.ramRandom.checked,
     lcdTiming: els.lcdTiming.value,
     txDelayChar: Number(els.serialDelayChar.value),
@@ -884,18 +910,181 @@ function saveVolume(v) {
 // ---- printing -------------------------------------------------------------
 
 function downloadBlob(bytes, filename, mime) {
-  const blob = new Blob([bytes], { type: mime });
+  downloadFile(new Blob([bytes], { type: mime }), filename);
+}
+
+function downloadFile(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // A minute rather than a moment: a recording runs to hundreds of megabytes,
+  // and the browser may still be reading it when a short timer would fire.
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
 /** The moment, for the name of a file being downloaded. */
 function stamp() {
   return fileStamp(new Date());
+}
+
+// ---- recording ------------------------------------------------------------
+
+const RECORD_FRAME_KEY = 'portfoliator.recordFrame';
+
+const recordSay = reporter(els.recordMsg);
+
+/** Ticks the elapsed time on the toolbar button while a recording runs. */
+let recordTimer = 0;
+
+/** Set between the Stop click and the file being ready. */
+let recordStopping = false;
+
+function loadRecordFrame() {
+  try {
+    const raw = localStorage.getItem(RECORD_FRAME_KEY);
+    return FRAMES.includes(raw) ? raw : 'case';
+  } catch {
+    return 'case';
+  }
+}
+
+function saveRecordFrame(frame) {
+  try {
+    localStorage.setItem(RECORD_FRAME_KEY, frame);
+  } catch {
+    /* the choice simply will not be remembered */
+  }
+}
+
+/** The case artwork as an image the recording can draw, rather than a CSS background. */
+function loadShellImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(src));
+    img.src = src;
+  });
+}
+
+/**
+ * The toolbar button doubles as the stop control, so while a recording runs it
+ * shows the time and takes the click that ends it. Written from here on every
+ * change of language, because the static layer would put "Nagrywanie" back.
+ */
+function showRecordButton() {
+  const button = els.record;
+  button.removeAttribute('data-i18n');
+  button.classList.toggle('recording', recorder.active);
+  button.disabled = recordStopping;
+  button.textContent = recorder.active
+    ? t('Zakończ nagrywanie ({0})', formatElapsed(recorder.elapsed))
+    : t('Nagrywanie');
+}
+
+/** Leaving the page mid-recording would throw the recording away, so ask first. */
+function holdWhileRecording(e) {
+  e.preventDefault();
+  e.returnValue = '';
+}
+
+async function startRecording() {
+  if (recorder.active) return;
+  const frame = els.recordFrame.value === 'screen' ? 'screen' : 'case';
+
+  // A recording always carries a sound track, so that switching sound on
+  // halfway through is heard in the file too - a track cannot be added to a
+  // running recording. With the switch off the track exists but stays silent.
+  // Started first, while the click still counts as the gesture audio needs.
+  if (!els.audioSwitch.checked) audio.setMuted(true);
+  await audio.start();
+  const audioStream = audio.captureStream();
+
+  const s = Number(els.scale.value) || 2;
+  const shell = SHELLS[s] || SHELLS[2];
+  let shellImage = null;
+  if (frame === 'case') {
+    try {
+      shellImage = await loadShellImage(`${shell.image}${versionQuery()}`);
+    } catch {
+      audio.releaseStream();
+      recordSay(() => t('Nie udało się wczytać grafiki obudowy.'), 'err');
+      return;
+    }
+  }
+
+  const layout = recordingLayout({
+    frame, shell, dpr: window.devicePixelRatio || 1,
+    screenW: canvas.width, screenH: canvas.height,
+  });
+
+  try {
+    recorder.start({
+      layout, shellImage, audioStream,
+      // The artwork has rounded corners; outside them the page shows through.
+      background: getComputedStyle(document.body).backgroundColor,
+    });
+  } catch (err) {
+    audio.releaseStream();
+    recordSay(() => t('Nagrywanie nie ruszyło: {0}', err.message), 'err');
+    return;
+  }
+
+  // The layout is fixed for the length of the file; a new zoom would need
+  // a different one.
+  els.scale.disabled = true;
+  recordSay('');
+  els.recordDialog.close();
+  // Focus returns to the toolbar button when the dialog closes, and a button
+  // with focus is one Space away from ending the recording.
+  els.record.blur();
+  recordTimer = setInterval(showRecordButton, 1000);
+  showRecordButton();
+  window.addEventListener('beforeunload', holdWhileRecording);
+}
+
+async function stopRecording() {
+  if (!recorder.active || recordStopping) return;
+  recordStopping = true;
+  clearInterval(recordTimer);
+  showRecordButton();
+
+  const { blob, extension } = await recorder.stop();
+  audio.releaseStream();
+  window.removeEventListener('beforeunload', holdWhileRecording);
+  els.scale.disabled = false;
+  recordStopping = false;
+  showRecordButton();
+  els.record.blur();
+
+  if (!blob.size) {
+    noticeModal({ title: t('Nagrywanie'), message: t('Nagranie wyszło puste — przeglądarka nie oddała żadnych danych.') });
+    return;
+  }
+  downloadFile(blob, `portfolio-${stamp()}.${extension}`);
+}
+
+function wireRecorder() {
+  els.recordFrame.value = loadRecordFrame();
+  els.recordFrame.addEventListener('change', () => saveRecordFrame(els.recordFrame.value));
+
+  els.record.addEventListener('click', () => {
+    if (recorder.active) {
+      stopRecording();
+      return;
+    }
+    // The same courtesy as every other dialog: let go of held keys first.
+    if (worker) worker.postMessage({ type: 'blur' });
+    hostKeys.forget();
+
+    const supported = recordingSupported();
+    els.recordStart.disabled = !supported;
+    if (!supported) recordSay(() => t('Ta przeglądarka nie potrafi nagrywać obrazu ze strony.'), 'warn');
+    els.recordDialog.showModal();
+  });
+
+  els.recordStart.addEventListener('click', startRecording);
 }
 
 // ---- memory card ----------------------------------------------------------
@@ -959,6 +1148,14 @@ function setCard(slot, image, { reinsert = true, warn = false } = {}) {
   refreshCardUI(slot);
 }
 
+/** A stored card image at its card size, written back when it had to grow. */
+function padStoredCard(key, image) {
+  if (!image) return image;
+  const { image: padded, padded: grew } = padCardImage(image);
+  if (grew) saveCard(key, padded);
+  return padded;
+}
+
 function refreshCardUI(slot) {
   const table = slot.el('Files');
   const info = slot.el('Info');
@@ -980,7 +1177,12 @@ function refreshCardUI(slot) {
       kb, entries.length,
       formatBytes(fat.freeSpace(slot.image)), formatBytes(fat.totalSpace(slot.image)));
   } catch (err) {
-    info.textContent = t('Karta {0} KB — nierozpoznany format ({1})', kb, err.message);
+    // No file system is no fault when the card is a ROM extension: the BIOS
+    // runs it from its first bytes, and that is all it is for.
+    const signature = romSignature(slot.image);
+    info.textContent = signature
+      ? t('Karta {0} KB — rozszerzenie ROM ({1}), bez systemu plików', kb, signature)
+      : t('Karta {0} KB — nierozpoznany format ({1})', kb, err.message);
     return;
   }
 
@@ -1369,7 +1571,7 @@ function startFileSend(file, bytes) {
   }
 }
 
-/** How many 128 s standby periods the machine tolerates before cutting power. */
+/** How many 128 s clock periods without a key the BIOS may count before switching off. */
 function applyStandby() {
   worker.postMessage({ type: 'setOption', standbyPeriods: Number(els.standby.value) || 0 });
 }
@@ -2030,7 +2232,16 @@ function inspectDraw(msg) {
   // --- port log ---
   if (msg.dropped) inspectLog.push({ drop: msg.dropped });
   for (const w of msg.log) inspectLog.push(w);
-  if (inspectLog.length > 400) inspectLog = inspectLog.slice(-400);
+  // The whole kept log is drawn afresh every time, so the first line measures its
+  // gap from the entry just before it - the last one trimmed off the front - and
+  // not from wherever the previous drawing happened to end, which came out
+  // negative.
+  if (inspectLog.length > 400) {
+    const cut = inspectLog.length - 400;
+    const before = inspectLog[cut - 1];
+    inspectPrevCyc = before.drop ? null : before.cyc;
+    inspectLog = inspectLog.slice(cut);
+  }
 
   if (!insp.io.checked) {
     insp.log.innerHTML = `<i>${esc(t('Śledzenie wyłączone.'))}</i>`;
@@ -2040,12 +2251,12 @@ function inspectDraw(msg) {
     let poprz = inspectPrevCyc;
     const out = inspectLog.map((w) => {
       if (w.drop) { poprz = null; return `<i>${esc(t('… pominięto {0} wpisów', w.drop))}</i>`; }
-      const luka = poprz === null ? '' : String(w.cyc - poprz);
+      // A reset zeroes the CPU's cycle count, so a gap across one is not a gap.
+      const luka = poprz === null || w.cyc < poprz ? '' : String(w.cyc - poprz);
       poprz = w.cyc;
       return `${hx(w.port, 4)}  ${w.r ? '<i>&lt;-</i>' : '<b>-&gt;</b>'}  ${hx(w.val, 2)}  ` +
              `<i>${luka.padStart(8)}</i>`;
     });
-    inspectPrevCyc = poprz;
     insp.log.innerHTML =
       `<i>${esc(t('port / kierunek / bajt / cykli od poprzedniego'))}</i>\n` + out.join('\n');
     insp.log.scrollTop = insp.log.scrollHeight;
@@ -2316,6 +2527,7 @@ function retranslateDynamic() {
   updateSerialLine(lastSerialLine);
   showSendButton();
   markWebSerial();
+  showRecordButton();
   if (els.audioSwitch.checked) sayAudioState();
   if (permdata) renderPermdataTab();
 }
@@ -2357,6 +2569,7 @@ function wireControls() {
   wireState();
   wireLanguage();
   wirePermdata();
+  wireRecorder();
 
   wireReset('btn-reset');
   wireReset('btn-print-reset');
@@ -2434,8 +2647,18 @@ function wireControls() {
     slot.el('File').addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      setCard(slot, new Uint8Array(await file.arrayBuffer()), { warn: true });
+      // A raw ROM shorter than a card goes in the way it would be burnt: at the
+      // start of the chip, with the rest of the chip erased.
+      const { image, padded } = padCardImage(new Uint8Array(await file.arrayBuffer()));
+      setCard(slot, image, { warn: true });
       e.target.value = '';
+      if (padded) {
+        noticeModal({
+          title: t('Obraz dopełniony'),
+          message: t('Plik {0} ma {1} B, mniej niż karta. Reszta karty do {2} KB jest wypełniona bajtami FFh, tak jak niezapisane miejsce w EPROM-ie.',
+            file.name, formatNumber(file.size), formatNumber(image.length / 1024)),
+        });
+      }
     });
 
     slot.el('Add').addEventListener('change', async (e) => {
@@ -2704,8 +2927,10 @@ async function boot() {
   }
 
   const nvram = await storage.get('nvram').catch(() => null);
-  const card = await storage.get('cardA').catch(() => null);
-  const cardB = await storage.get('cardB').catch(() => null);
+  // Short raw images stored before they were padded on the way in get their
+  // erased tail now, so they read as they would on hardware.
+  const card = padStoredCard('cardA', await storage.get('cardA').catch(() => null));
+  const cardB = padStoredCard('cardB', await storage.get('cardB').catch(() => null));
   const hpc104Ram = await storage.get('hpc104ram').catch(() => null);
 
   // Restore the fitted hardware before init, so the worker builds the right
@@ -2721,7 +2946,12 @@ async function boot() {
     if (settings.standby !== undefined) els.standby.value = settings.standby;
     if (settings.ramRandom !== undefined) els.ramRandom.checked = !!settings.ramRandom;
     if (settings.lcdTiming !== undefined) els.lcdTiming.value = settings.lcdTiming;
-    if (settings.systemTick !== undefined) els.systemTick.checked = !!settings.systemTick;
+    // Up to 1.00 this box started cleared and was saved as `systemTick`, so nearly
+    // every stored setting says false without anyone having chosen it - harmless
+    // then, when the tick it governed never reached the CPU anyway, and a dead
+    // clock now that it is the NMI. Only the new key, written by someone who has
+    // seen the box as it is now, is honoured.
+    if (settings.clock !== undefined) els.systemTick.checked = !!settings.clock;
     if (settings.txDelayChar !== undefined) els.serialDelayChar.value = settings.txDelayChar;
     if (settings.txDelayLine !== undefined) els.serialDelayLine.value = settings.txDelayLine;
   }

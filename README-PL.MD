@@ -204,6 +204,7 @@ js/ui/lcdgrid.js        geometria siatki punktów panelu i malarz obrazu
 js/ui/lcdramp.js        paleta panelu: co rejestr kontrastu robi z kolorami
 js/ui/serial.js         drugi koniec kabla: terminal, Web Serial, modem, null-modem
 js/ui/fat12.js          czytanie i zapis obrazów kart FAT12
+js/ui/cardimage.js      surowe obrazy ROM na karcie: dopełnienie do układu, słowo rozszerzenia
 js/eprom/epr.js         banki karty EPROM w układzie konwertera z Atari ST
 js/eprom/app.js         strona karty EPROM: pliki, banki, pobieranie
 js/ui/audio.js          wyjście Web Audio
@@ -211,6 +212,7 @@ js/ui/permdata.js       odczyt C:\SYSTEM\PERMDATA.DAT z pamięci maszyny
 js/ui/i18n.js           przełączanie języka i podstawianie tłumaczeń
 js/ui/format.js         daty (RRRR-MM-DD) i liczby (kropka dziesiętna) tak, jak pokazuje je strona
 js/ui/confirm.js        pytania i komunikaty w oknie strony
+js/ui/recorder.js       nagrywanie ekranu do pliku wideo, z obudową albo bez
 js/ui/dict-en.js        słownik: polski tekst źródłowy -> angielski
 tools/pofo-headless.mjs rdzeń emulatora uruchamiany w Node, bez przeglądarki
 tools/run-tests.mjs     uruchamiacz zestawów testowych
@@ -279,6 +281,13 @@ odpowiada okno.
 Dziennik notuje **odczyty razem z zapisami**, i to też nie jest ozdoba: usterka, przez
 którą klawisze kontrastu nie działały, siedziała w **odczycie**, który nic nie zwracał.
 Zapisy wyglądały wtedy poprawnie — po prostu zawsze niosły tę samą liczbę.
+
+Maszyna czekająca przy znaku zachęty **nie dotyka żadnego portu**: BIOS zatrzymuje
+procesor rozkazem `HLT` i budzi go dopiero przerwanie, więc dziennik zostaje pusty —
+i mówi prawdę. Żeby coś w nim zobaczyć, naciśnij klawisz: przy otwartym Inspektorze
+klawisze nadal trafiają do Portfolio, chyba że kursor stoi w którymś z pól tekstowych
+okna; `Esc` zamyka okno. Do 1.00 okno połykało każdy klawisz, przez co bezczynna maszyna
+wyglądała na zepsuty dziennik — to też wyłapał feedback z forum.
 
 Deasembler (`js/emu/disasm.js`) obsługuje całą jednobajtową mapę 8088 razem z grupami,
 przedrostkami i blokami łańcuchowymi; opkody nieudokumentowane, które emulator realizuje
@@ -411,9 +420,10 @@ usługę ROM-u tak, jak zrobiłby to program: dwubajtowy `INT n` z `HLT` ląduje
 bajtach pamięci obrazu, a procesor dostaje go do wykonania, więc wektor, flagi i `IRET`
 zachowują się jak dla prawdziwego kodu.
 
-Tą drogą ustalono, dlaczego emulator nie zasypiał, zweryfikowano tablice tonów, znaleziono
-rejestr prędkości tiku (`INT 61h` `1Eh` zapisuje `8040h`) oraz wyjaśniono, czego ROM żąda,
-żeby wstać po poleceniu `OFF`.
+Tą drogą zweryfikowano tablice tonów, znaleziono rejestr prędkości tiku (`INT 61h` `1Eh`
+zapisuje `8040h`), wyjaśniono, czego ROM żąda, żeby wstać po poleceniu `OFF`, a w 1.02
+prześledzono i sprawdzono NMI zegara, alarm terminarza i własne odliczanie BIOS-u do
+wyłączenia.
 
 ### Okablowanie interfejsu
 
@@ -510,7 +520,7 @@ przeglądarki, plus plik `.pofostate` do przeniesienia gdzie indziej.
 To jest coś innego niż pamięć podtrzymywana bateryjnie, która zapisuje się sama. Tamta
 przechowuje dysk `C:` i przeżywa wyłączenie, ale po włączeniu Portfolio startuje od nowa —
 bo dokładnie tak zachowywał się sprzęt. Zrzut przechowuje **przebieg**: procesor w połowie
-instrukcji, zawartość ekranu, licznik cykli, kolejkę klawiatury, obie odliczanki uśpienia.
+instrukcji, zawartość ekranu, licznik cykli, kolejkę klawiatury, stan zegara między dwoma NMI.
 
 Zrzut niesie też **konfigurację sprzętu**, i to nie jest ozdoba: stan zapisany z wpiętym
 rozszerzeniem pamięci musi wrócić z tym rozszerzeniem, inaczej dysk `B:` znika razem
@@ -553,6 +563,47 @@ najciaśniejszy — pełny stan z kartą i rozszerzeniem waży około 690 KB —
 własnego układu pól**: koder chodzi po obiekcie rekurencyjnie, więc dołożenie pola do
 dowolnego urządzenia nie wymaga tknięcia `js/ui/statefile.js`. Format, który trzeba
 aktualizować razem z każdym urządzeniem, prędzej czy później przestaje być aktualizowany.
+
+## Nagrywanie
+
+Przycisk **Nagrywanie** na pasku zapisuje obraz i dźwięk emulatora do pliku wideo prosto ze
+strony, więc demo albo błąd da się pokazać bez programu do przechwytywania ekranu. Kadry są
+dwa: **ekran z obudową**, domyślny, i **sam ekran**, czyli samo szkło z pustym pasem nad
+i pod obrazem, na film, który pójdzie dalej do montażu. Wybór jest zapamiętywany. Po starcie
+okno się zamyka, a przycisk zamienia się w licznik czasu; kliknięcie go kończy nagranie
+i pobiera `portfolio-RRRR-MM-DD-GGMMSS.webm`.
+
+Obraz jest taki, jaki pokazuje panel — z siatką punktów, kontrastem i bezwładnością — w jego
+własnej rozdzielczości. Nagranie nie bierze płótna LCD wprost: obudowa jest tłem CSS, a nie
+częścią żadnego płótna, a płótno LCD jest przycinane od nowa przy każdej zmianie skali albo
+powiększenia monitora. Dlatego [`js/ui/recorder.js`](js/ui/recorder.js) ma własne płótno,
+o rozmiarze ustalonym raz, na starcie nagrania, i każde odświeżenie panelu jest do niego
+składane: grafika obudowy z tabeli `SHELLS`, a na niej panel w miejscu, w które stawia go
+strona. Oba w pikselach urządzenia, więc pamięć płótna panelu trafia na klatkę jeden do
+jednego, a siatka zostaje tak ostra jak na stronie. Przy 4× i powiększeniu systemowym 100%
+obudowa wychodzi 1628×716 — 715 z grafiki dociągnięte do parzystej, bo kodery wideo chcą
+parzystych wymiarów — a sam ekran 960×320. Na czas nagrania skala jest zablokowana.
+
+Klatki idą za panelem. `captureStream()` bez podanej częstotliwości bierze klatkę za każdym
+razem, gdy płótno jest rysowane, więc nieruchomy prompt nic prawie nie kosztuje; co 250 ms
+ostatni obraz jest rysowany ponownie, bo strumień, który przestaje dawać klatki, kończyłby
+plik na ostatniej zmianie, a nie na kliknięciu Stop. Przepływność idzie za rozmiarem klatki,
+6 bitów na piksel na sekundę w granicach 2–12 Mb/s, czyli około 7 Mb/s dla obudowy przy 4×:
+domyślne wartości przeglądarek są za niskie dla pikseli o ostrych krawędziach.
+
+**Dźwięk jest brany za regulacją głośności**, więc plik niesie to, co grają głośniki. Ścieżka
+istnieje także przy wyłączonym dźwięku, cicha, bo do trwającego nagrania nie da się dołożyć
+ścieżki: dźwięk włączony w połowie też jest wtedy w pliku słychać.
+
+Chrome, Edge i Firefox nagrywają WebM (VP9 albo VP8 z Opusem), Safari MP4. Pliki WebM
+z przeglądarki nie mają spisu klatek, więc niektóre odtwarzacze nie pozwalają w nich
+przewijać; YouTube przyjmuje je takie, jakie są, a `ffmpeg -i nagranie.webm -c copy
+nagranie.mkv` przepakowuje plik do montażu bez kodowania od nowa. Nagranie siedzi w pamięci
+aż do Stop, więc wyjście ze strony w trakcie najpierw pyta.
+
+`tools/tests/recorder.mjs` sprawdza układ klatki w każdej skali i przy typowych powiększeniach
+systemowych, czytając geometrię z tej samej tabeli `SHELLS`, której używa strona, a także
+wybór formatu i przepływności.
 
 ## Obudowa
 
@@ -1045,9 +1096,9 @@ Dekodowane jest wyłącznie `80xxh` (po bitach 7:4) oraz `0061h`.
 | `8000h` | kod klawisza | — |
 | `8010h` / `8011h` | dane / status LCD | dane / instrukcja LCD |
 | `8020h` | — | generator DTMF PCD3311T (nieemulowany) |
-| `8030h` | — | zarządzanie zasilaniem (bit 1 = wyłącz) |
-| `8040h` | licznik, młodszy bajt (2 Hz) | prędkość tiku (bit 0: 1 = 1 s, 0 = 128 s) |
-| `8041h` | licznik, starszy bajt + źródło wybudzenia | ustawienie licznika, starszy bajt |
+| `8030h` | — | zarządzanie zasilaniem (bit 1 = tryb OFF; `00h` = czuwanie przed `HLT`) |
+| `8040h` | takty 2 Hz od ostatniego NMI zegara | prędkość zegara (bit 0: 1 = NMI co 1 s, 0 = co 128 s) |
+| `8041h` | przyczyna włączenia: bit 0 klawisz, bit 1 NMI zegara; odczyt potwierdza NMI | — |
 | `8050h` | stan przerwań (IP) | maska przerwań (IE) |
 | `8051h` | stan baterii / PDET / ROM_B, bit 7 = włączanie | selektor magistrali ROM_B |
 | `8060h` | — | kontrast LCD |
@@ -1105,88 +1156,103 @@ jak jeden z tych dwóch.
 
 ## Przerwania
 
-Nie ma 8259. ASIC ma czterobitowe rejestry IP (pending) i IE (enable); linia INT0
-procesora jest aktywna, gdy `IP & IE ≠ 0`. Przy potwierdzeniu przerwania ASIC
-zwraca wektor pierwszego ustawionego bitu i go kasuje:
+Nie ma 8259. ASIC ma rejestry IP (pending) i IE (enable) pod `8050h`; linia INT
+procesora jest aktywna, gdy `IP & IE ≠ 0`. Przy potwierdzeniu przerwania ASIC zwraca
+wektor pierwszego ustawionego bitu i go kasuje. Numery bitów to te, które ustawia sam
+BIOS: `0Ah` przy znaku zachęty i `1Ah`, kiedy ma wybraną kartę (`E000:05E6`).
 
 | Bit | Źródło | Wektor |
 |---|---|---|
-| 0 | tick systemowy | `08h` |
 | 1 | klawiatura | `09h` |
-| 2 | błąd | `00h` |
-| 3 | zewnętrzne (port rozszerzeń) | z peryferium |
+| 3 | zewnętrzne (port rozszerzeń) | z peryferium (SIVR) |
+| 4 | dostęp do karty — karta wyjęta, kiedy BIOS ma ją wybraną | `15h` |
 
-Przerwanie ticku systemowego chodzi **z prędkością, o którą prosi maszyna**. Wbrew
-temu, co pisaliśmy tu wcześniej, **nie ma trybu 128 Hz**: dokumentacja DIP-a podaje
-dwie prędkości — **raz na sekundę** albo **raz na 128 sekund** — i wybiera się je
-funkcją `INT 61h`, podfunkcją `1Eh` (*Get/Set Clock tick speed*, str. 3-14 i 3-31
-przewodnika technicznego). Rejestrem, który za tym stoi, jest **zapis do `8040h`**:
-`01h` wybiera tik co sekundę, `00h` — co 128 sekund. Namierzono go, logując zapisy
-do portów w trakcie tego wywołania; przez cały rozruch, kilka poleceń DOS-u i 20 s
-bezczynności port dostaje dokładnie jeden zapis — `00h` wysyłane przez BIOS spod
-`E000:0322`, czyli wybór trybu wolnego, oszczędzającego baterie. Nic innego z tego
-portu nie korzysta i dlatego młodsza połówka czytana jest jako wybór prędkości,
-a nie jako młodszy bajt licznika.
+**Zegara wśród nich nie ma: to NMI.** Do 1.00 emulator, za MAME, podawał zegar jako
+przerwanie maskowalne na bicie 0 z wektorem `08h` — a że BIOS bitu 0 nigdy nie włącza,
+zegar przy znaku zachęty przeważnie stał. Zwrócił na to uwagę użytkownik forum, który
+dobrze zna tę maszynę, i ROM potwierdza każde jego słowo. Obsługa NMI pod `E000:1D06`
+czyta `8041h`, żeby je potwierdzić, woła `INT 08h`, który przesuwa czas i porównuje go
+z alarmem, a potem robi to, czego `INT 08h` nie robi: dzwoni należnym alarmem przez
+`INT 4Ah` (alarmem terminarza), odlicza czas do trybu OFF (niżej) i kończy `INT 1Ch`
+dla programów. W starym modelu alarmy terminarza nigdy nie dzwoniły.
 
-Dopiero znajomość prędkości pozwoliła **oprzeć tik o wybraną prędkość**. Wcześniej był
-wyłączony, bo tykanie co sekundę programowi, który poprosił o tryb wolny, byłoby
-128 razy za częste; teraz emulator po prostu podąża za wyborem maszyny. Przełącznik
-w interfejsie wycisza przerwanie zupełnie, dla tych, którzy tego chcą.
+Zegar to takt 2 Hz napędzający ośmiobitowy licznik, który `8040h` oddaje jako liczbę
+taktów **od ostatniego NMI**. NMI przychodzi **raz na sekundę** (co dwa takty) albo
+**raz na 128 sekund** (gdy licznik się przewinie) — to dwie prędkości, które DIP opisuje
+przy `INT 61h`, podfunkcji `1Eh` (*Get/Set Clock tick speed*, str. 3-14 i 3-31
+przewodnika technicznego), a wybiera je **zapis do `8040h`**: `01h` tryb szybki, `00h`
+wolny, który BIOS wybiera przy każdym starcie (`E000:0322`). Dokładnie z tego BIOS
+składa godzinę (`E000:2B08`): półsekundy trzymane w `0040:0144`, które ścieżka NMI
+przesuwa o 2 albo o `100h`, plus odczyt `8040h`, minus to, co ten port pokazywał, kiedy
+ostatnio ustawiano czas (`0040:014A`).
+
+Alarm terminarza dzwoni przy tym NMI, które zastanie go w ciągu najbliższych 70 sekund
+(`E000:2AD8`): w trybie wolnym to do minuty przed czasem albo po nim — arytmetyka
+samego ROM-u, nie emulatora.
+
+**Dostęp do karty, `INT 15h`.** Wyjęcie karty, kiedy BIOS ma ją wybraną i włączony bit 4
+— w praktyce w trakcie odczytu sektora — zgłasza `INT 15h`. Obsługa w ROM-ie pod
+`E000:1CCC` przerywa odczyt, a DOS zgłasza `Data error reading drive A:`. Przy znaku
+zachęty okno pokazuje ROM aplikacji i karta po prostu znika. Slot `B:` na HPC-104 tego
+przerwania nie zgłasza: nie wiadomo, jak ta płyta sygnalizuje wyjęcie karty.
+
+Przełącznik **System → Zegar Portfolio** zatrzymuje cały łańcuch, dla tych, którzy tego
+chcą — stają razem z nim godzina Portfolio, alarmy i samoczynne wyłączanie.
 
 ## Zarządzanie energią
 
-Prawdziwe Portfolio samo odcina zasilanie po kilku minutach bez naciśnięcia klawisza.
-**Nie robi tego ROM, tylko układ ASIC** — ustalone dezasemblacją pętli oczekiwania
-BIOS-u pod `E000:143F`:
+Prawdziwe Portfolio samo się wyłącza po kilku minutach bez naciśnięcia klawisza i **robi
+to BIOS, licząc NMI zegara**. Do 1.00 stało tu coś odwrotnego — że robi to układ ASIC —
+bo w pętli oczekiwania pod `E000:143F` odliczania nie ma:
 
 ```asm
+143A: AND  byte [0125], 7Fh  ; zapomnij ostatni klawisz
 143F: STI
 1440: MOV  DX, 8030h      ; rejestr sterowania zasilaniem
 1443: MOV  AL, 0
-1445: OUT  DX, AL         ; wejście w stan czuwania
-1446: HLT                 ; zatrzymanie procesora do przerwania
+1445: OUT  DX, AL         ; czuwanie: zatrzymanie zegara procesora
+1446: HLT                 ; do przerwania
 1447: NOP
 1448: TEST byte [0125], 80h
-144D: JZ   143F           ; kręć się, dopóki bit 7 nie zapłonie
+144D: JZ   143F           ; obudziło coś innego niż klawisz: z powrotem
 ```
 
-Bit 7 bajtu `0040:0125` ustawia **dokładnie jedno miejsce w całym BIOS-ie**
-(`E000:1553`) i jest to ścieżka klawiatury: przez 30 sekund bezczynności wykonuje się
-zero razy, po naciśnięciu klawisza dwa razy. W tej pętli **nie ma żadnego odliczania
-czasu** — gdyby wyłączenie zależało od ROM-u, musiałoby być właśnie tutaj.
+Odliczanie siedzi w obsłudze NMI. Bit 7 bajtu `0040:0125` ustawia wyłącznie ścieżka
+klawiatury (`E000:1553`); dopóki jest zapalony, obsługa NMI przeładowuje licznik
+w `0040:014C`, a w przeciwnym razie odejmuje od niego jeden. Przy zerze skacze pod
+`E000:2008`, które zapisuje sesję, ustawia kontrast na zero i wpisuje `02h` do `8030h`
+— tryb OFF. W trybie wolnym licznik startuje od 2, więc maszyna gaśnie przy drugim NMI
+po ostatnim klawiszu: **między 128 a 256 s**, dokładnie jak opisuje to dokumentacja
+DIP-a. Na egzemplarzu autora zmierzono ok. 230 s.
 
-Emulacja odwzorowuje więc licznik układu, a nie kod: zapis do `8030h` z wyzerowanym
-bitem 1 uzbraja czuwanie, aktywność klawiatury kasuje odliczanie, a po przekroczeniu
-zadanej liczby granic 128-sekundowych maszyna gaśnie. Granica bierze się z tego samego
-licznika 2 Hz co reszta czasomierzy (256 zliczeń = 128 s), więc realny czas do uśpienia
-zależy od fazy — przy dwóch okresach wypada **między 128 a 256 s**, dokładnie jak
-opisuje to dokumentacja DIP-a. Na egzemplarzu autora zmierzono ok. 230 s, w emulatorze
-wychodzi typowo 251 s.
-
-Po uśpieniu **procesor stoi, a ekran gaśnie** — to jest odcięcie zasilania, nie pauza.
-**Budzi dowolny klawisz**: procesor nie został zatrzymany w połowie instrukcji, tylko
-czeka na `HLT` wewnątrz tamtej pętli, więc wznowienie plus przerwanie klawiatury
-wystarczą, żeby sesja potoczyła się dalej od tego samego miejsca.
-
-Odliczanie biegnie **wyłącznie wtedy, gdy procesor faktycznie stoi** — bo tym właśnie
-jest czuwanie. Program, który liczy, jest w trybie RUN i nie podlega wyłączeniu:
-demo grające kilka minut bez czekania na klawisz dochodzi do końca nietknięte,
-a odliczanie rusza dopiero, gdy wróci prompt. Sprawdzone na Nucleusie — gra 321 s
-z procesorem ani razu niezatrzymanym, wraca do `a>`, i dopiero 182 s później maszyna
-gaśnie. Przy okazji odtwarza to zachowanie, które DIP opisuje osobno: program
+Program, który pracuje, do tej pętli nie zagląda, więc bit nie gaśnie, a licznik jest
+wciąż przeładowywany: demo grające kilka minut bez czekania na klawisz dochodzi do
+końca nietknięte. Odtwarza to także zachowanie, które DIP opisuje osobno — program
 odpytujący klawiaturę w pętli zamiast czekać na `INT 16h` **nigdy** nie pozwoli
-maszynie zasnąć.
+maszynie się wyłączyć.
 
-Wybór należy do użytkownika — **System → Zasypianie po bezczynności** — bo wierność ma
-tu cenę: emulator zostawiony w otwartej karcie gaśnie w trakcie czytania. Domyślnie
-ustawione tak jak w prawdziwym Portfolio.
+Wybór należy do użytkownika — **System → Samoczynne wyłączanie** — bo wierność ma tu
+cenę: emulator zostawiony w otwartej karcie gaśnie w trakcie czytania. Domyślnie
+ustawione tak jak w prawdziwym Portfolio. Pozostałe ustawienia działają tak, że tuż
+przed NMI, które opróżniłoby licznik, emulator dokłada BIOS-owi jeszcze jedną rundę
+jego własnego odliczania; „Nigdy” robi to za każdym razem.
 
-Polecenie `OFF` to osobna droga i głębszy sen. Przewodnik DIP-a rozdziela te dwa stany
-w sekcji 2.5.1: w czuwaniu wszystko jest zasilane, a wstrzymany zostaje tylko zegar
-`CCLK`, natomiast w trybie OFF napięcie ma już wyłącznie układ ASIC i pamięć RAM.
-Procesora nie ma więc czego wznawiać — powrót idzie przez impuls `MRST`, czyli sprzętowy
-ciepły restart, i tak też robi to emulator. Sesja wraca w całości: RAM jest przez cały
-czas podtrzymywany, więc dysk `C:` i to, co było na ekranie, przeżywają wyłączenie.
+Tryb OFF — po poleceniu `OFF` i po odliczaniu tak samo — zasila już wyłącznie układ
+ASIC i pamięć RAM (przewodnik DIP-a, sekcja 2.5.1). Procesora nie ma czego wznawiać,
+więc powrót idzie przez impuls `MRST`, czyli sprzętowy ciepły restart, a `8041h` mówi
+BIOS-owi, dlaczego: bit 0 to klawisz, bit 1 zegar. Po klawiszu sesja wraca w całości:
+RAM jest przez cały czas podtrzymywany, więc dysk `C:` i to, co było na ekranie,
+przeżywają wyłączenie.
+
+**W trybie OFF zegar idzie dalej.** Co 128 sekund jego NMI daje impuls `MRST`
+z bitem 1; BIOS przesuwa czas ze ścieżki restartu (`E000:0100`), sprawdza alarm
+i, jeśli nic nie nadeszło, od razu wraca do OFF — kilka milisekund, przez które strona
+trzyma ekran ciemny. Gdy alarm nadszedł, BIOS wznawia sesję i alarm dzwoni: alarm
+terminarza włącza maszynę tak samo jak na sprzęcie.
+
+Czuwanie, drugi stan z sekcji 2.5.1, to zegar procesora zatrzymany przez `00h` wpisane
+do `8030h` przed `HLT` w tamtej pętli. Dla wszystkiego poza układem to procesor stojący
+na `HLT` i czekający na przerwanie — a to emulator ma i tak.
 
 ## Co zimny start zostawia w pamięci
 
@@ -1344,6 +1410,18 @@ nie dotyczy kart formatowanych tutaj.
 
 Drugi drobiazg do zapamiętania: bajt pod offsetem `0Ah` sektora rozruchowego jest
 zarezerwowany na rejestr stron dla kart większych niż 128 KB. Nic tam nie wolno pisać.
+
+**Surowy obraz ROM wgrywa się jak każdy inny obraz karty**, przez *Wgraj obraz…* — na
+przykład rozszerzenie z podręcznika technicznego Atari, które ma kilkaset bajtów i żadnego
+systemu plików wokół siebie. Obraz krótszy od karty jest dopełniany bajtami `FFh` do układu,
+w który zostałby wypalony: do najbliższego z 32, 64 i 128 KB, a powyżej do najbliższego
+pełnego banku 128 KB. Tyle zostawia programator w niezapisanym miejscu, a układ mniejszy od
+okna 128 KB powtarza się wtedy co swój rozmiar, jak na sprzęcie. Bez dopełnienia obraz
+513-bajtowy powtarzał się co 513 bajtów, czego żaden sprzęt nie robi. Karty zapamiętane
+w przeglądarce wcześniej dopełniają się przy wczytaniu strony. Okno karty nazywa taką kartę
+po słowie rozszerzenia — *rozszerzenie ROM (AA55h), bez systemu plików* — zamiast mówić
+o nierozpoznanym formacie. Robi to [`js/ui/cardimage.js`](js/ui/cardimage.js),
+a `tools/tests/card-image.mjs` sprawdza, co procesor odczyta potem z okna karty.
 
 ### Autostart z karty
 
@@ -1816,11 +1894,8 @@ Dlatego to urządzenie NMD1 wystawia.
 - **8087** — instrukcje ESC są dekodowane i pomijane; Portfolio i tak nie miał
   koprocesora.
 - **Portfolio 2** (`pofo2`, F82C425, 640×200).
-- **Drugie źródło wybudzenia po `OFF`.** Wstając po impulsie `MRST`, ROM pyta ASIC
-  o powód włączenia i rozpoznaje dwa — bity 0 i 1 odczytu spod `8041h`. Bit 0 to
-  klawiatura i tylko ona jest modelowana; ścieżka drugiego bitu prowadzi w ROM-ie do
-  osobnej procedury, a co ją na sprzęcie wyzwala, nie zostało ustalone. Nic w
-  emulatorze tego bitu nie podaje.
+- **Wyjęcie karty ze slotu `B:`** nie zgłasza `INT 15h`: nie wiadomo, jak HPC-104 to
+  sygnalizuje (zob. [Przerwania](#przerwania)).
 
 ## Autor
 

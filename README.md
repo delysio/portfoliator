@@ -203,6 +203,7 @@ js/ui/lcdgrid.js        dot-grid geometry for the panel, and the painter
 js/ui/lcdramp.js        the panel palette: what the contrast register does to the colours
 js/ui/serial.js         the other end of the cable: terminal, Web Serial, modem, null-modem
 js/ui/fat12.js          reading and writing FAT12 card images
+js/ui/cardimage.js      raw ROM card images: padding to the chip size, the extension word
 js/eprom/epr.js         EPROM card banks in the Atari ST converter's layout
 js/eprom/app.js         the EPROM card page: files, banks, downloads
 js/ui/audio.js          Web Audio output
@@ -210,6 +211,7 @@ js/ui/permdata.js       reads C:\SYSTEM\PERMDATA.DAT out of machine memory
 js/ui/i18n.js           language switching and translation lookup
 js/ui/format.js         dates (YYYY-MM-DD) and numbers (decimal point) as the page shows them
 js/ui/confirm.js        questions and notices in the page's own dialog
+js/ui/recorder.js       video recording of the screen, with or without the case
 js/ui/dict-en.js        dictionary: Polish source text -> English
 tools/ws-tcp-proxy.mjs  WebSocket→TCP bridge for the virtual modem
 tools/pofo-headless.mjs the emulator core driven from Node, with no browser
@@ -279,6 +281,13 @@ it comes from a window.
 The log records **reads as well as writes**, and that is not padding either: the fault that
 left the contrast keys useless lived in a **read** that returned nothing. The writes looked
 perfectly fine at the time - they simply always carried the same number.
+
+A machine waiting at the prompt **touches no port at all**: the BIOS stops the CPU with
+`HLT` and only an interrupt wakes it, so the log stays empty, and truthfully so. To give
+it something to show, press a key: with the Inspector open, keys still go to the Portfolio,
+except while the cursor stands in one of the window's text fields; `Esc` closes the window.
+Up to 1.00 the window swallowed every key, which made an idle machine look like a broken
+log - another thing the forum feedback caught.
 
 The disassembler (`js/emu/disasm.js`) covers the whole one-byte 8088 map including the
 group opcodes, the prefixes and both string blocks; the undocumented opcodes the emulator
@@ -409,9 +418,10 @@ ROM service the way a program would: a two-byte `INT n` followed by `HLT` is pla
 spare video RAM and the CPU is pointed at it, so the vector, the flags and the `IRET`
 behave exactly as they do for real code.
 
-It is how the power-down question was settled, how the tone tables were verified, how the
-tick-rate register turned up (`INT 61h` `1Eh` writes `8040h`), and what the ROM demands
-before it will come up after the `OFF` command.
+It is how the tone tables were verified, how the tick-rate register turned up (`INT 61h`
+`1Eh` writes `8040h`), what the ROM demands before it will come up after the `OFF`
+command, and — in 1.02 — how the clock NMI, the Diary alarm and the BIOS's own
+power-off countdown were traced and checked.
 
 ### Wiring the interface up
 
@@ -508,7 +518,7 @@ This is a different thing from the battery-backed memory that saves itself. That
 holds drive `C:` and survives being switched off, but the Portfolio still starts from
 scratch when it comes back on, because that is exactly what the hardware did. A snapshot
 holds the **run**: the CPU midway through an instruction, what is on the screen, the cycle
-count, the keyboard queue, both standby countdowns.
+count, the keyboard queue, where the clock stands between two NMIs.
 
 A snapshot also carries the **fitted hardware**, and that is not decoration: a state saved
 with the memory expansion in place has to come back with it, or drive `B:` disappears
@@ -553,6 +563,47 @@ tightest possible — a full state with a card and the expansion runs to about 6
 it has **no field layout of its own**: the encoder walks the object recursively, so adding
 a field to any device needs no change to `js/ui/statefile.js`. A format that must be
 updated alongside every device eventually stops being updated.
+
+## Recording
+
+The **Recording** button on the toolbar saves the emulator's picture and sound to a video
+file straight from the page, so a demo or a bug can be shown without screen-capture
+software. There are two framings: **screen in the case**, the default, and **screen only**,
+which is the glass alone with its blank band above and below the picture, for a video that
+goes on to be edited. The choice is remembered. Once started, the dialog closes and the
+button turns into a timer; clicking it ends the recording and downloads
+`portfolio-YYYY-MM-DD-HHMMSS.webm`.
+
+The picture is what the panel shows — dot grid, contrast, inertia — at its own resolution.
+The recording does not capture the LCD canvas directly: the case is a CSS background rather
+than part of any canvas, and the LCD canvas is re-cut whenever the zoom or the monitor's
+scaling changes. So [`js/ui/recorder.js`](js/ui/recorder.js) keeps a canvas of its own, sized
+once when the recording starts, and every repaint of the panel is composited into it: the
+artwork from the `SHELLS` table, then the panel at the position the page gives it. Both are
+placed in device pixels, so the panel's backing store lands on the frame one to one and the
+grid stays as sharp as on the page. At 4× and 100% system scaling the case comes out at
+1628×716 — the artwork's 715 rounded up, because video encoders want even sizes — and the
+screen alone at 960×320. The zoom is locked for the length of a recording.
+
+Frames follow the panel. `captureStream()` with no rate takes a frame each time the canvas is
+drawn, so a still prompt costs next to nothing; a keepalive redraws the last picture every
+250 ms, because a stream that stops producing frames would end the file at its last change
+rather than at the Stop click. The bit rate follows the frame size, 6 bits per pixel per
+second within 2–12 Mb/s, which is about 7 Mb/s for the case at 4×: the browsers' own
+defaults are too low for sharp-edged pixels.
+
+**Sound is taken after the volume control**, so the file carries what the speakers play. The
+track is there even while sound is off, silent, because a running recording cannot gain a
+track: switching sound on halfway through is then heard in the file as well.
+
+Chrome, Edge and Firefox record WebM (VP9 or VP8 with Opus), Safari MP4. WebM files from a
+browser carry no cue index, so some players cannot seek in them; YouTube takes them as they
+are, and `ffmpeg -i recording.webm -c copy recording.mkv` repackages one for editing without
+re-encoding. The recording lives in memory until Stop, so leaving the page halfway asks first.
+
+`tools/tests/recorder.mjs` checks the frame layout at every zoom and at the usual system
+scalings, reading the geometry from the same `SHELLS` table the page uses, as well as the
+choice of format and bit rate.
 
 ## Case artwork
 
@@ -1055,9 +1106,9 @@ Only `80xxh` (decoded on bits 7:4) and `0061h` are decoded.
 | `8000h` | key code | — |
 | `8010h` / `8011h` | LCD data / status | LCD data / instruction |
 | `8020h` | — | PCD3311T DTMF generator (not emulated) |
-| `8030h` | — | power management (bit 1 = power off) |
-| `8040h` | counter, low byte (2 Hz) | clock tick rate (bit 0: 1 = 1 s, 0 = 128 s) |
-| `8041h` | counter, high byte + wake-up source | counter reload, high byte |
+| `8030h` | — | power management (bit 1 = OFF mode; `00h` = standby before `HLT`) |
+| `8040h` | 2 Hz ticks since the last clock NMI | clock rate (bit 0: 1 = NMI every 1 s, 0 = every 128 s) |
+| `8041h` | why the machine powered up: bit 0 key, bit 1 clock NMI; the read acknowledges the NMI | — |
 | `8050h` | interrupt pending (IP) | interrupt enable (IE) |
 | `8051h` | battery status / PDET / ROM_B, bit 7 = power-up | ROM_B bus selector |
 | `8060h` | — | LCD contrast |
@@ -1116,85 +1167,104 @@ identifier as one of those two.
 
 ## Interrupts
 
-There's no 8259. The ASIC has 4-bit IP (pending) and IE (enable) registers;
-the CPU's INT0 line is active whenever `IP & IE ≠ 0`. On interrupt
-acknowledge, the ASIC returns the vector of the first set bit and clears it:
+There's no 8259. The ASIC has IP (pending) and IE (enable) registers at `8050h`;
+the CPU's INT line is active whenever `IP & IE ≠ 0`. On interrupt acknowledge,
+the ASIC returns the vector of the first set bit and clears it. The bit numbers are
+the ones the BIOS itself sets: `0Ah` at the prompt, and `1Ah` while it has a card
+selected (`E000:05E6`).
 
 | Bit | Source | Vector |
 |---|---|---|
-| 0 | system tick | `08h` |
 | 1 | keyboard | `09h` |
-| 2 | error | `00h` |
-| 3 | external (expansion port) | from the peripheral |
+| 3 | external (expansion port) | from the peripheral (SIVR) |
+| 4 | card access — the card pulled out while the BIOS has it selected | `15h` |
 
-The system tick interrupt runs **at the rate the machine asks for**. There is **no
-128 Hz mode**, contrary to what this file used to say: DIP's documentation gives two
-rates — **once per second** or **once every 128 seconds** — selected with `INT 61h`
-subfunction `1Eh` (*Get/Set Clock tick speed*, pages 3-14 and 3-31 of the technical
-reference). The register behind that call is the **write to `8040h`**: `01h` picks
-one tick a second, `00h` one every 128 seconds. It was found by logging port writes
-across the call, and over a boot, a handful of DOS commands and twenty seconds of
-idling it is written exactly once — the `00h` the BIOS sends from `E000:0322` to
-choose the slow, battery-saving rate. Nothing else uses the port, which is why the
-low half is read as a rate selector rather than as the counter's low byte.
+**The clock is not among them: it is the NMI.** Up to 1.00 the emulator, following
+MAME, raised the clock as a maskable interrupt on bit 0 with vector `08h` — and since
+the BIOS never enables bit 0, the clock at the prompt mostly stood still. A forum user
+who knows the machine well pointed it out, and the ROM confirms every word of it. The
+NMI handler at `E000:1D06` reads `8041h` to acknowledge, calls `INT 08h` to move the
+time on and compare it with the alarm, and then does what `INT 08h` does not: rings a
+due alarm through `INT 4Ah` (the Diary's), counts the inactivity countdown towards OFF
+mode (see below) and ends with `INT 1Ch` for programs. With the old model the Diary's
+alarms never sounded.
 
-Knowing the rate is what let the tick **follow the rate a program asks for**. It used to be off,
-because ticking every second for a program that had asked for the slow rate would
-have been 128 times too often; now the emulator simply follows the selection. The
-toggle in the UI silences it entirely, for anyone who wants that.
+The clock is a 2 Hz tick driving an 8-bit counter, which `8040h` reads back as the
+number of ticks **since the last NMI**. The NMI comes **once per second** (every two
+ticks) or **once every 128 seconds** (when the counter wraps) — the two rates DIP
+documents for `INT 61h` subfunction `1Eh` (*Get/Set Clock tick speed*, pages 3-14 and
+3-31 of the technical reference), selected by a **write to `8040h`**: `01h` for the
+fast rate, `00h` for the slow one, which the BIOS picks at every boot (`E000:0322`).
+The BIOS builds the time of day out of exactly that (`E000:2B08`): half-seconds kept at
+`0040:0144`, which the NMI path advances by 2 or by `100h`, plus the `8040h` reading,
+minus what that port read when the time was last set (`0040:014A`).
+
+A Diary alarm rings at the NMI that finds it within the next 70 seconds
+(`E000:2AD8`): at the slow rate that is up to a minute early or late, which is the
+ROM's own arithmetic, not the emulator's.
+
+**Card access, `INT 15h`.** Pulling a card out while the BIOS has it selected and bit 4
+enabled — in the middle of reading a sector, in practice — raises `INT 15h`. The ROM's
+handler at `E000:1CCC` ends the read, and DOS reports `Data error reading drive A:`.
+At the prompt the window shows the application ROM and the card simply goes. Slot `B:`
+on the HPC-104 does not raise it: how that board reports a removal is not known.
+
+The toggle **System → Portfolio clock** stops the whole chain, for anyone who wants
+that — the Portfolio's time, its alarms and the automatic power-off stand still with it.
 
 ## Power management
 
-A real Portfolio cuts its own power after a few minutes without a key press. **That is
-the ASIC, not the ROM** — established by disassembling the BIOS wait loop at
-`E000:143F`:
+A real Portfolio switches itself off after a few minutes without a key press, and **the
+BIOS does it, counting clock NMIs**. Up to 1.00 this file said the opposite — that the
+ASIC did it — because the wait loop at `E000:143F` holds no countdown:
 
 ```asm
+143A: AND  byte [0125], 7Fh  ; forget the last key
 143F: STI
 1440: MOV  DX, 8030h      ; power control register
 1443: MOV  AL, 0
-1445: OUT  DX, AL         ; enter standby
-1446: HLT                 ; stop the CPU until an interrupt
+1445: OUT  DX, AL         ; standby: stop the CPU clock
+1446: HLT                 ; until an interrupt
 1447: NOP
 1448: TEST byte [0125], 80h
-144D: JZ   143F           ; spin until bit 7 comes up
+144D: JZ   143F           ; woken by something other than a key: park again
 ```
 
-Bit 7 of `0040:0125` is set by **exactly one place in the whole BIOS** (`E000:1553`),
-and that is the keyboard path: zero executions in 30 seconds of idling, two on a key
-press. There is **no countdown in this loop at all** — if the power-down were the ROM's
-doing, this is where it would have to live.
+The countdown lives in the NMI handler instead. Bit 7 of `0040:0125` is set by the
+keyboard path alone (`E000:1553`); the handler reloads the countdown at `0040:014C`
+while that bit is up, and otherwise takes one off it. At zero it jumps to
+`E000:2008`, which saves the session, sets the contrast to zero and writes `02h` to
+`8030h` — OFF mode. The countdown is loaded with 2 at the slow rate, so the machine
+goes off on the second NMI after the last key: **between 128 and 256 s**, exactly as
+DIP documents it. The author's unit measures about 230 s.
 
-The emulation therefore models the chip's timer rather than any code: a write to
-`8030h` with bit 1 clear arms standby, keyboard activity restarts the count, and
-crossing the configured number of 128 s boundaries cuts power. The boundary comes off
-the same 2 Hz counter as the other timers (256 counts = 128 s), so the real delay
-depends on phase — with two periods it lands **between 128 and 256 s**, exactly as DIP
-documents it. The author's unit measures about 230 s; the emulator typically gives 251 s.
+A program doing work never parks in that loop, so the bit is never cleared and the
+countdown keeps being reloaded: a demo running for minutes without waiting on a key
+reaches its end untouched. This also reproduces a quirk DIP calls out separately — a
+program that polls the keyboard in a loop instead of waiting on `INT 16h` will
+**never** let the machine switch off.
 
-Once asleep the **CPU stops and the screen goes dark** — this is a power cut, not a
-pause. **Any key wakes it**: the CPU was never stopped mid-instruction, it is waiting on
-the `HLT` inside that loop, so resuming it plus the keyboard interrupt is enough for the
-session to carry on from the same place.
+The choice is the user's — **System → Automatic power-off** — because fidelity has a
+price here: an emulator left in an open tab does go dark while you read. It is set the
+way a real Portfolio behaves by default. The other settings work by handing the BIOS
+one more round of its own countdown just before the NMI that would empty it; "Never"
+does that every time.
 
-The count only advances **while the CPU is actually halted**, because that is what
-standby is. A program doing work is in RUN mode and out of reach of the timer: a demo
-running for minutes without waiting on a key reaches its end untouched, and the count
-only starts once the prompt is back. Verified against Nucleus — it plays for 321 s with
-the CPU never once halted, returns to `a>`, and only 182 s after that does the machine
-go dark. This also reproduces a quirk DIP calls out separately: a program that polls the
-keyboard in a loop instead of waiting on `INT 16h` will **never** let the machine sleep.
+OFF mode, whether the `OFF` command or the countdown led there, powers nothing but the
+ASIC and the RAM (DIP's guide, section 2.5.1). There is no CPU left to resume, so the
+way back is an `MRST` pulse — a hardware warm boot — and `8041h` tells the BIOS why:
+bit 0 for a key, bit 1 for the clock. A key brings the session back whole: RAM keeps
+its power throughout, so drive `C:` and the screen you left behind both survive.
 
-The choice is the user's — **System → Power down when idle** — because fidelity
-has a price here: an emulator left in an open tab does go dark while you read. It is set
-the way a real Portfolio behaves by default.
+**The clock goes on in OFF mode.** Every 128 seconds its NMI pulses `MRST` with bit 1
+set; the BIOS moves the time on from its reset path (`E000:0100`), looks at the alarm
+and, with nothing due, goes straight back to OFF — a few milliseconds the page keeps
+dark. With an alarm due it brings the session back and the alarm rings: a Diary alarm
+switches the machine on, as it does on the hardware.
 
-The `OFF` command is a separate route, and a deeper sleep. DIP's guide keeps the two
-states apart in section 2.5.1: in standby everything stays powered and only the `CCLK`
-clock is halted, while in OFF mode the supply reaches nothing but the ASIC and the RAM.
-There is no CPU left to resume, so the way back is an `MRST` pulse — a hardware warm
-boot — and that is what the emulator does. The session comes back whole: RAM keeps its
-power throughout, so drive `C:` and the screen you left behind both survive.
+Standby, the other mode in section 2.5.1, is the CPU clock stopped by the `00h` written
+to `8030h` before the `HLT` in that loop. To everything outside the chip that is a halted
+CPU waiting for an interrupt, which is what the emulator has anyway.
 
 ## What a cold start leaves in RAM
 
@@ -1353,6 +1423,18 @@ built from a genuine DIP-DOS boot sector, so cards formatted here are not affect
 
 One more thing to leave alone: the byte at offset `0Ah` of the boot sector is reserved
 for the page register of cards larger than 128 KB.
+
+**A raw ROM image loads like any other card image**, through *Load image…* — the
+extension example in the Atari technical handbook, say, which is a few hundred bytes with
+no file system around it. An image shorter than a card is padded with `FFh` up to the chip
+it would be burnt into: the next of 32, 64 and 128 KB, or the next whole 128 KB bank past
+that. This is what an EPROM programmer leaves in unprogrammed space, and a chip smaller
+than the 128 KB window then repeats every chip size, as on hardware. Unpadded, a 513-byte
+image used to repeat every 513 bytes, which no hardware does. Cards stored in the browser
+before this are padded when the page loads. The card dialog names such a card by its
+extension word — *ROM extension (AA55h), no file system* — rather than calling it an
+unrecognised format. [`js/ui/cardimage.js`](js/ui/cardimage.js) does both, and
+`tools/tests/card-image.mjs` checks what the CPU reads from the card window afterwards.
 
 ### Booting from a card
 
@@ -1851,11 +1933,8 @@ read error instead of a phantom. So this device asserts NMD1.
 - **8087** — ESC instructions are decoded and skipped; the Portfolio never
   had a coprocessor anyway.
 - **Portfolio 2** (`pofo2`, F82C425, 640×200).
-- **The second wake-up source after `OFF`.** Coming up from the `MRST` pulse, the ROM
-  asks the ASIC why it was switched on, and recognises two answers — bits 0 and 1 of
-  the read at `8041h`. Bit 0 is the keyboard and only that one is modelled; the other
-  bit leads into a separate routine in the ROM, and what asserts it on real hardware
-  was never established. Nothing here ever raises it.
+- **Card removal in slot `B:`** does not raise `INT 15h`: how the HPC-104 reports it is
+  not known (see [Interrupts](#interrupts)).
 
 ## Author
 
